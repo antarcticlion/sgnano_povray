@@ -66,10 +66,12 @@ typedef struct {
     uint32_t options_hash;       // 解像度・AA などの同一性
     uint32_t outputs;            // SGNANO_OUTPUT_*（0 なら FB）
     bool resume;                 // 既存のチェックポイントを使う
+    bool defer_fb_restore;       // FB がまだ無い間に開き、あとで restore_fb する
     bool verbose;
 } sgnano_app_config_t;
 
 bool     sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t *plat);
+bool     sgnano_app_restore_fb(void);   // defer_fb_restore のとき、FB が使えるようになってから呼ぶ
 uint32_t sgnano_app_resume_row(void);
 uint32_t sgnano_app_lines_done(void);
 bool     sgnano_app_all_done(void);

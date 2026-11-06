@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(sgnano_povray LANGUAGES C CXX)
+project(sgnano_povray LANGUAGES C CXX ASM)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -75,6 +75,38 @@ if(NOT CMAKE_CROSSCOMPILING)
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz"
     )
     target_link_libraries(test_sgx_checkpoint PRIVATE m)
+endif()
+
+# 実機 SGX 用の小さな試し（apps/povprobe）。sgnano の SDK の sgx.cmake を使う。
+#   cmake -S . -B build_sgx -G Ninja \
+#     -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+#     -DSGNANO_BUILD_SGX_PROBE=ON
+option(SGNANO_BUILD_SGX_PROBE "Build povprobe.sgx for a real sgnano device" OFF)
+if(SGNANO_BUILD_SGX_PROBE)
+    set(SGNANO_SGX_SDK_DIR "/home/antarcticlion/Project/sgnano/sdk/sgx" CACHE PATH "sgnano SGX SDK directory")
+    if(NOT EXISTS "${SGNANO_SGX_SDK_DIR}/sgx.cmake")
+        message(FATAL_ERROR "SGNANO_SGX_SDK_DIR does not contain sgx.cmake: ${SGNANO_SGX_SDK_DIR}")
+    endif()
+    include("${SGNANO_SGX_SDK_DIR}/sgx.cmake")
+    sgx_add_program(povprobe NAME "POV-Ray probe" STACK 65536
+        SOURCES
+            "${CMAKE_CURRENT_SOURCE_DIR}/apps/povprobe/povprobe.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/app/sgnano_app.c"
+            "${CMAKE_CURRENT_SOURCE_DIR}/app/sgx/sgnano_app_sgx.c"
+            ${SGNANO_PNG_SOURCES}
+        INCLUDES
+            "${CMAKE_CURRENT_SOURCE_DIR}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/platform/sgx"
+            "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz"
+        DEFINES
+            SGNANO_SGX_OFFICIAL_ABI=1
+            MINIZ_NO_ARCHIVE_APIS=1
+            MINIZ_NO_TIME=1
+            MINIZ_NO_STDIO=1
+        # GCC が sgx_libc.c の「malloc + memset(0)」を calloc への呼び出しに
+        # 置き換え、calloc 自身の定義の中で無限再帰になるのを防ぐ。
+        # -fno-builtin-calloc だけでは止まらない（malloc 側の認識なので全体を切る）。
+        OPTIONS -fno-builtin)
 endif()
 
 # ARM (RP2350) のサイズ測定用。リンクはせず、オブジェクトの合計サイズを見る。

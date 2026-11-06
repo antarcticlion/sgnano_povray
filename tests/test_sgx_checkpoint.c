@@ -35,7 +35,7 @@ int main(void)
         fprintf(stderr, "sgx host init failed\n");
         return 1;
     }
-    if (sgnano_sgx_spare_bytes() == 0) {
+    if (!sgnano_sgx_lend_spare() || sgnano_sgx_spare_bytes() == 0) {
         fprintf(stderr, "fb_lend_spare returned no pages\n");
         return 1;
     }
@@ -62,16 +62,26 @@ int main(void)
         fprintf(stderr, "checkpoint was not kept\n");
         return 1;
     }
+    sgnano_sgx_shutdown();          // 借りた FB のページを返してから作り直す
 
-    // 再開。FB は作り直してもよい（チェックポイントから戻す）。
+    // 再開。実機と同じ順番（mode 1 でストアを開く → mode 2 → FB へ戻す）。
     cfg.image_path = png;
     cfg.outputs = SGNANO_OUTPUT_PNG;
-    if (!sgnano_sgx_host_init(W, H) || !sgnano_sgx_init(W, H)) {
+    cfg.defer_fb_restore = true;
+    if (!sgnano_sgx_host_init(W, H) || !sgnano_sgx_init_text(W, H)) {
         fprintf(stderr, "sgx host re-init failed\n");
         return 1;
     }
     if (!sgnano_app_init(&cfg, sgnano_sgx_platform())) {
         fprintf(stderr, "app resume init failed\n");
+        return 1;
+    }
+    if (!sgnano_sgx_enter_fb(W, H) || !sgnano_app_restore_fb()) {
+        fprintf(stderr, "fb restore failed\n");
+        return 1;
+    }
+    if (!sgnano_sgx_lend_spare()) {
+        fprintf(stderr, "fb_lend_spare failed on resume init\n");
         return 1;
     }
     if (sgnano_app_resume_row() != 10u) {

@@ -1,9 +1,14 @@
 // sgnano 本体の ABI 4.0（2026-11-06）のうち、このアプリが使う口だけを持つスタブ。
 // 正式な型は third_party/sgnano/sgx_api.h。ファームの sgx_api_t と同じ並び・同じ型にそろえる。
+//
+// ホスト試験では sgx4_stub_host.c がこの小さな表を作る。
+// 実機（SGNANO_SGX_OFFICIAL_ABI）では SDK の sgx_api_t をそのまま使い、sgx4 を
+// sgx_crt0.c が定義する sgx に読み替える（名前だけの違い）。
 #ifndef SGNANO_SGX4_STUB_H
 #define SGNANO_SGX4_STUB_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include "sgx_api.h"
 
@@ -14,6 +19,26 @@
 #define SGX4_T_BG(c)    (((uint32_t)(c) & 15u) << 4)
 #define SGX4_T_BG_TRANS 0x00000400u
 #define SGX4_T_FG_TRANS 0x00000200u
+
+#ifdef SGNANO_SGX_OFFICIAL_ABI
+
+// 実機: SDK の表をそのまま使う。sgx は sgx_crt0.c が定義する。
+typedef sgx_api_t sgx4_stub_api_t;
+extern const sgx_api_t *sgx;
+#define sgx4 sgx
+
+static inline bool sgx4_has_store(void)
+{
+    // 関数の欄が表の大きさに収まっているか（3.x のファームでは無い）。
+    return sgx && sgx->size >= offsetof(sgx_api_t, store_error) + sizeof(void *);
+}
+
+static inline bool sgx4_has_fb_lend_spare(void)
+{
+    return sgx && sgx->size >= offsetof(sgx_api_t, fb_lend_spare) + sizeof(void *);
+}
+
+#else
 
 typedef struct {
     uint32_t abi_major, abi_minor;
@@ -49,5 +74,18 @@ typedef struct {
 } sgx4_stub_api_t;
 
 extern const sgx4_stub_api_t *sgx4;
+
+static inline bool sgx4_has_store(void)
+{
+    return sgx4 && sgx4->store_open && sgx4->store_close && sgx4->store_get &&
+           sgx4->store_release && sgx4->store_flush && sgx4->store_stats;
+}
+
+static inline bool sgx4_has_fb_lend_spare(void)
+{
+    return sgx4 && sgx4->fb_lend_spare;
+}
+
+#endif
 
 #endif

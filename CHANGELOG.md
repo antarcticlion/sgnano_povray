@@ -26,6 +26,28 @@
 - Added selectable output: FB only, lossless PNG (miniz deflate level 9), or
   both. The default is now `both`.
   `tools/run_host.py --output fb|png|both`.
+- Added the real-hardware SGX probe `apps/povprobe` and `tools/hw_probe.py`.
+  It exercises mode 2, `fb_lend_spare`, block-store checkpoints, resume,
+  lossless PNG, and the 38GB USB HDD.
+- The render status now includes a progress bar; the probe also prints a
+  `progress` line to UART every 16 lines.
+- Store checkpoint files are rounded up to a 64KB multiple for the exFAT HDD.
+- The real-hardware path now opens the block store in mode 1 (text only) and
+  enters mode 2 afterwards. On the 38GB exFAT HDD, `store_open` stalls when the
+  FB is displayed (2026-11-06); `storetest` succeeds in mode 1. Resumed lines
+  are restored with `sgnano_app_restore_fb()`.
+- The checkpoint file is pre-created with `write_file` to avoid the CREATE
+  zero-fill path in `store_open`.
+- `fb_lend_spare` pages are sorted by address so the contiguous 1.8MB block is
+  used for the PNG scratch.
+- `tools/hw_probe.py` re-detects the exFAT/NTFS drive letter before each pass
+  (USB host restarts can move the 38GB HDD from B: to C:).
+- Added `tools/render_all_scenes.py` (per-file time limit, summary).
+  All 13 scenes rendered at 640x480 on the host in 6.2-10.2s each.
+- Transferred the 15 scene files to `B:/POVTEST/scenes`, the rendered PNGs to
+  `B:/POVTEST/renders`, and the logs to `B:/POVTEST/renders/logs`.
+- Verified 12 rendered PNGs in the real device's filer image viewer; the
+  336KB `11_slow_spheres.png` is measured with a 5-minute cap.
 - Added miniz 3.1.2 for portable PNG writing.
 - Added SGX 4.0 overlay + block-store design notes and ABI proposal.
 - Added an SGX stub platform (`platform/sgx/sgx4_stub.h`,

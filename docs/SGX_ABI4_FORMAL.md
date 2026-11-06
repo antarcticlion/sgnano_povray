@@ -135,3 +135,16 @@ POV-Ray の見積もり（像 約 2MB・スタック 192KB・ヒープ・スト�
 2. POV-Ray の `.sgx` の大きさ（libc / libstdc++ を結んだあと）と、ファイラーから走らせたときに入るか（入らなければ大きさと、`mem_info` の空きを知らせてほしい）
 3. `fb_lend_spare` で借りたページをヒープに使えるか
 4. 足りない口・使いにくい口（例: 先読みを裏で進めたい、ブロックの大きさの上限、C++ の実行時の部品）
+
+---
+
+## 5. オーバーレイ（SDK の部品、2026-11-06 追記）
+
+ABI 4.0 には入れていないが、**SDK の部品**として使える（ファームを変えずに、4.0 の `ra_read`・`psram_alloc` だけで動く）。
+sgnano_povray の実機テストが済んだら、sgnano 側で ABI に組み込む予定。
+
+- 部品: `~/Project/sgnano/sdk/sgx/include/sgx_overlay.h`・`sgx_overlay.c`・`sgx_ovl.ld`・`sgx_ovl_pack.py`、CMake は `sgx_add_overlay_module` / `sgx_add_overlay_pack`（`sgx.cmake`）
+- 説明: `~/Project/sgnano/docs/sgx_abi.md` の §10。見本: `~/Project/sgnano/apps/ovltest`
+- 形は素案の §4.3〜4.4 とほぼ同じ: モジュールは番地 0 に結び、`init(ctx, iface, size)` が関数の表を埋める。常駐の機能は `ctx->host`。替えたら前の番地はすべて無効（pin する）。
+  素案との違い: スロットの数・大きさは常駐が `sgx_ovl_add_slot` で決める（パックには持たない）。名前で引ける（`sgx_ovl_find`）。`.init_array`・例外の表は持てない（C++ の静的な初期化はモジュールに置けない）
+- 確かめ: QEMU（Cortex-M33）で約 1MB のモジュールを 128KB x 2 のスロットへ 300 回入れ替え、すべて一致（`scripts/test_overlay.py`）。**実機は未確認**

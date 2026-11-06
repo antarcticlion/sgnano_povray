@@ -32,10 +32,16 @@ third_party/sgnano/sgx_api.h 正式 ABI 4.0 のヘッダ（byte-identical）
 
 ## SGX 側の前提
 
-- 画面: `set_mode(SGX_MODE_TEXT_FB)`（mode 2）。戻り値は `const char *` で、
+- 画面: ストアを開く間は `set_mode(SGX_MODE_TEXT)`（mode 1）、描画の前に
+  `set_mode(SGX_MODE_TEXT_FB)`（mode 2）。戻り値は `const char *` で、
   NULL が成功。
-- FB の余りページ: `fb_lend_spare(0, pages, 4, &page_bytes)` で mode 2 の
-  表示ページ 0 を残し、残り 3 ページ（約 1.8MB）を借りる。
+  - **実機（38GB HDD の exFAT）では mode 2 のまま `store_open` すると
+    止まった**（2026-11-06）。`storetest` は mode 1 で通るため、開く間だけ
+    mode 1 にし、開いてから mode 2 へ入る。再開するラインは
+    `sgnano_app_restore_fb()` で FB へ戻す。
+- FB の余りページ: ストアを開いたあと `fb_lend_spare(0, pages, 4, &page_bytes)`
+  で mode 2 の表示ページ 0 を残し、残り 3 ページ（約 1.8MB）を借りる。
+  - ページは高い番地から返るので、番地の順に並べ替えてから使う。
   - PNG の RGB 作業場が入る場合はそれを使い、入らなければ `malloc` に落とす。
   - 借りている間は `set_mode` とページ切り替えをしない（このアプリは mode 2 固定）。
   - 終了時に `fb_return()` で返す。
@@ -43,8 +49,10 @@ third_party/sgnano/sgx_api.h 正式 ABI 4.0 のヘッダ（byte-identical）
 - テキスト面: `text_clear(attr)` と `text_puts(col,row,utf8,attr)` で
   0〜5 行目に状態を出す。背景は透過。
 - チェックポイント: 正式 ABI 4.0 のブロックストア。
-  - ブロックサイズ 4096 バイト。
-  - `SGX_STORE_WRITEBACK | SGX_STORE_CREATE`。
+  - ブロックサイズ 4096 バイト。ファイルは 64KB の倍数に丸める。
+  - `SGX_STORE_WRITEBACK | SGX_STORE_CREATE`。ただし CREATE の 0 埋めは
+    実機の mode 2 で止まるため、先に `write_file` で同じ大きさの 0 の
+    ファイルを作り、既存ファイルとして開く。
   - キャッシュ 8 ブロック。
   - 途中経過は `store_flush` で機器へ書き戻す。
 - 時刻: `ms()`。
@@ -64,9 +72,18 @@ third_party/sgnano/sgx_api.h 正式 ABI 4.0 のヘッダ（byte-identical）
 | `ms` | `uint32_t ms(void)` |
 | `stop_requested` | `bool stop_requested(void)` |
 
+## 実機で確認できたこと（2026-11-06）
+
+- 38GB HDD（exFAT）で `storetest` が 47/47 合格。
+- `povprobe` で mode 1 → ストアを開く → mode 2 → 再開ラインを FB へ復元、
+  1 ラインごとのチェックポイント、120 行で停止 → 480 行まで再開、
+  PNG（可逆）と RGB555 生データの一致まで確認。
+- `fb_lend_spare` の 3 ページ（1,843,200 B）を PNG の作業場に使用。
+- SDK の `sgx_libc.c` の `calloc` は `-O2` で無限再帰にコンパイルされる
+  ことがある。`-fno-builtin` で回避（SDK 側の修正が本筋）。
+
 ## まだ無いもの
 
-- 実機での起動・描画（実機が空くのを待つ）。
 - POV-Ray の SGX 用フロントエンド（`vfe/unix` の置き換え）。
 - 借りた FB の余りページを POV-Ray のヒープ／メッシュキャッシュへ渡すこと。
 - メッシュ／テクスチャのブロックストア化。

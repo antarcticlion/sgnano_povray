@@ -19,6 +19,8 @@ POV-Ray 3.7 を sgnano（RP2350 のビデオコンソール）の **SGX アプ�
 | SGX 側のスタブ | 正式 ABI 4.0 の型に更新済み（`platform/sgx/sgx4_stub.h`、`app/sgx/`） |
 | FB の余りページ | `fb_lend_spare` で 3 ページ（約1.8MB）を借り、PNG 作業場に使用 |
 | 出力 | FB / 可逆圧縮 PNG（miniz）を選択可能 |
+| 実機プローブ | `apps/povprobe`（mode 2・チェックポイント・PNG・38GB HDD） |
+| 進捗表示 | テキスト面に進捗バー＋UART に `progress` 行 |
 | ARM サイズ測定 | 完了（`source/` 全体で 1.41MB、libc 別） |
 
 ## クイックスタート（ホスト）
@@ -69,6 +71,57 @@ libc / libstdc++ は別。詳細は [`docs/PHASE0_SIZE.md`](docs/PHASE0_SIZE.md)
 - 再実行で 97 行目から再開し、480/480 まで完成。
 - 再開して完成した PNG と、最初から描いた PNG がバイト単位で一致。
 
+### 実機プローブ（SGX）
+
+POV-Ray 本体の前に、実機でアプリ層を確かめる `povprobe.sgx` があります。
+
+```sh
+cmake -S . -B build_sgx -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+  -DSGNANO_BUILD_SGX_PROBE=ON
+ninja -C build_sgx povprobe
+
+# 実機（38GB HDD の exFAT/NTFS パーティション。文字は再接続で変わります）
+RBRUN C:/POVTEST/povprobe.sgx	C:/POVTEST	fresh	120
+RBRUN C:/POVTEST/povprobe.sgx	C:/POVTEST	resume
+RBRUN C:/POVTEST/povprobe.sgx	C:/POVTEST	fresh
+
+# 自動で 3 パス＋PNG/生データの照合まで
+python3 tools/hw_probe.py
+```
+
+描画中は画面に `line 120/480 (25.0%)` と進捗バー、UART に
+`progress 128/480 (26.6%) 1234 ms` を出します。詳しくは
+[`docs/HW_PROBE.md`](docs/HW_PROBE.md)。
+
+#### 実機テスト結果（2026-11-06）
+
+- USB 3.0 の **38,154MB HDD**（exFAT）を使用。ドライブ文字は再接続で
+  B: ⇔ C: が入れ替わるため、毎回自動検出する。
+- sgnano の `storetest.sgx`: **47/47 合格**。
+  4KB×64 の作成 869ms、64KB×32（2MB）の作成 3289ms。
+- `povprobe`: 120/480 で停止（6.4 秒、チェックポイント 655,360 B）→
+  再開して 480/480 完成（24.1 秒）。最初からの 480 行は 28.3 秒
+  （実描画 18.8 秒＋PNG 符号化・生データ書き出し・3 秒表示）。
+- 再開後の FB 検証: **0 bad rows / 0 bad pixels**、FB CRC `30d0c6dd`。
+- 生データ 614,400 B の CRC も `30d0c6dd`。
+- PNG 42,966 B（640×480）をデコードし、RGB555 生データと
+  **1 画素も違わず一致**。resume と fresh の PNG・生データはバイト単位で一致。
+- `fb_lend_spare`: 1,843,200 B（3 ページ）を借り、PNG の RGB 作業場に使用。
+- チェックポイントは完成後に削除（`final checkpoint 0 B`）。
+- テストシーン 15 ファイルを **`B:/POVTEST/scenes`** へ転送済み
+  （13 の `.pov`、`README.md`、`generate_scenes.py`）。
+- 全 13 シーンをホスト版 640×480 で表示テスト: **すべて完走**。
+  6.2〜10.2 秒/シーン（5 分上限に対して余裕）。PNG は
+  **`B:/POVTEST/renders`**、ログは `B:/POVTEST/renders/logs` へ転送済み。
+- 実機のファイラーで 12 枚の PNG を表示確認（640×480、`view=1`）。
+  `11_slow_spheres.png`（336KB）は開いて 92%（448 行）まで表示した約 22 秒で
+  ビューアが閉じ、ファイラーへ戻った（5 分上限には達していない）。
+- **SGX 版 POV-Ray の実行ファイルはまだ未完成**。実機で `.pov` を直接
+  描くには SGX フロントエンド（VFE 置き換え、単一スレッド Task）が必要。
+  現在実機で動くのは `povprobe.sgx`（アプリ層の検証）まで。
+- 途中で見つけた SDK の `calloc` 無限再帰は `-fno-builtin` で回避。
+
 ## 設計の要点
 
 RP2350 の Cortex-M33 には MMU がないため、一般的な透過ページングは作れない。
@@ -77,9 +130,11 @@ RP2350 の Cortex-M33 には MMU がないため、一般的な透過ページ�
 - **プログラム**: 正式 ABI 4.0 では常駐（ARM の `-Os` で約 1.4MB、libc 別）。
   オーバーレイは 4.x で必要になったら足す。
 - **ヒープ**: ハンドル付きブロックストア（メッシュ、テクスチャ、シーン DB）。
+  実機の 38GB HDD（exFAT）では mode 2 のまま `store_open` すると止まるため、
+  ストアを開く間だけ mode 1（テキスト）にし、開いてから mode 2 へ入る。
 - **画面**: POV-Ray の画像バッファ（20B/画素）を持たず、RGB555 で FB へ直接書く。
   mode 2 の余り 3 ページ（約 1.8MB）は `fb_lend_spare` で借り、PNG の作業場と
-  将来の POV-Ray ヒープに使う。
+  将来の POV-Ray ヒープに使う。ページは番地の順に並べ替えてから使う。
 
 詳細は [`SPEC_sgx4_overlay_store.md`](SPEC_sgx4_overlay_store.md) と
 [`docs/SGX_STUB.md`](docs/SGX_STUB.md)、sgnano 側の引き渡し

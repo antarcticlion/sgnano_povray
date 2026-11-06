@@ -21,16 +21,27 @@ static bool g_text_cleared;
 static void *g_spare[4];
 static unsigned g_spare_n;
 static uint32_t g_spare_bytes;
+static bool g_spare_enabled = true;
 
 static uint32_t min_u32(uint32_t a, uint32_t b) { return a < b ? a : b; }
 
+// UART だけへ（実機の切り分け用）。画面のステータスは消さない。
+static void s_debug(const char *s)
+{
+    if (sgx4 && sgx4->log) sgx4->log(s, (unsigned)strlen(s));
+}
+
 static void *s_open(const char *path, uint32_t size, bool create)
 {
-    if (!sgx4 || !sgx4->store_open) return NULL;
+    if (!sgx4_has_store()) return NULL;
     sgx_store_t *h = (sgx_store_t *)malloc(sizeof *h);
     if (!h) return NULL;
     h->block_size = 4096;
+    // 実機の exFAT は 32KB などのクラスタ単位で書く。端数を残さないよう、
+    // ファイルの大きさを 64KB の倍数まで丸める（使わない後ろは 0 のまま）。
     h->blocks = (size + h->block_size - 1u) / h->block_size;
+    const uint32_t round_blocks = (64u * 1024u) / h->block_size;
+    h->blocks = (h->blocks + round_blocks - 1u) / round_blocks * round_blocks;
     sgx_store_config_t cfg;
     memset(&cfg, 0, sizeof cfg);
     cfg.path = path;
@@ -38,8 +49,10 @@ static void *s_open(const char *path, uint32_t size, bool create)
     cfg.block_count = h->blocks;
     cfg.cache_blocks = 8;
     cfg.flags = SGX_STORE_WRITEBACK | (create ? SGX_STORE_CREATE : 0u);
+    s_debug("store: open begin\n");
     h->id = sgx4->store_open(&cfg);
-    if (h->id < 0) { free(h); return NULL; }
+    if (h->id < 0) { s_debug("store: open failed\n"); free(h); return NULL; }
+    s_debug("store: open ok\n");
     return h;
 }
 
@@ -82,15 +95,17 @@ static bool s_write_at(void *vh, uint32_t off, const void *src, uint32_t n)
 static bool s_flush(void *vh)
 {
     sgx_store_t *h = (sgx_store_t *)vh;
-    return h && sgx4->store_flush && sgx4->store_flush(h->id) == 0;
+    return h && sgx4_has_store() && sgx4->store_flush(h->id) == 0;
 }
 
 static void s_close(void *vh)
 {
     sgx_store_t *h = (sgx_store_t *)vh;
     if (!h) return;
-    if (sgx4->store_flush) (void)sgx4->store_flush(h->id);
-    if (sgx4->store_close) (void)sgx4->store_close(h->id);
+    if (sgx4_has_store()) {
+        (void)sgx4->store_flush(h->id);
+        (void)sgx4->store_close(h->id);
+    }
     free(h);
 }
 
@@ -184,7 +199,24 @@ static const sgnano_app_platform_t g_platform = {
     .scratch_free = s_scratch_free,
 };
 
-bool sgnano_sgx_init(uint32_t width, uint32_t height)
+// ストアを開く段は mode 1（テキストだけ）にする。mode 2 で FB を出したまま
+// store_open すると、実機の HDD で exFAT の読み出しが止まることがあるため。
+bool sgnano_sgx_init_text(uint32_t width, uint32_t height)
+{
+    if (!sgx4 || !sgx4->set_mode) return false;
+    const char *e = sgx4->set_mode(SGX_MODE_TEXT);
+    if (e) return false;
+    g_fb = NULL;
+    g_w = width;
+    g_h = height;
+    g_text_cleared = false;
+    g_spare_n = 0;
+    g_spare_bytes = 0;
+    return true;
+}
+
+// 描画の段: mode 2（テキスト＋FB）にしてページ 0 を取る。
+bool sgnano_sgx_enter_fb(uint32_t width, uint32_t height)
 {
     if (!sgx4 || !sgx4->fb_page) return false;
     if (sgx4->set_mode) { const char *e = sgx4->set_mode(SGX4_STUB_MODE_TEXT_FB); if (e) return false; }
@@ -193,12 +225,36 @@ bool sgnano_sgx_init(uint32_t width, uint32_t height)
     g_w = width;
     g_h = height;
     g_text_cleared = false;
-    g_spare_n = 0;
-    g_spare_bytes = 0;
-    if (sgx4->fb_lend_spare)
-        g_spare_n = sgx4->fb_lend_spare(0, g_spare, 4, &g_spare_bytes);
     return true;
 }
+
+bool sgnano_sgx_init(uint32_t width, uint32_t height)
+{
+    g_spare_n = 0;
+    g_spare_bytes = 0;
+    return sgnano_sgx_enter_fb(width, height);
+}
+
+// ストアを開いたあとに呼ぶ。FB の余りページを借りる（ABI 4.0）。
+bool sgnano_sgx_lend_spare(void)
+{
+    if (!g_spare_enabled || !sgx4_has_fb_lend_spare()) return false;
+    g_spare_n = sgx4->fb_lend_spare(0, g_spare, 4, &g_spare_bytes);
+    // ファームはページを高い番地から返す（FB1, FB2, FB3）。番地の順に並べ、
+    // 続いている塊として PNG の作業場に使えるようにする。
+    for (unsigned i = 1; i < g_spare_n; i++) {
+        void *p = g_spare[i];
+        unsigned j = i;
+        while (j > 0 && (uintptr_t)g_spare[j - 1] > (uintptr_t)p) {
+            g_spare[j] = g_spare[j - 1];
+            j--;
+        }
+        g_spare[j] = p;
+    }
+    return g_spare_n > 0;
+}
+
+void sgnano_sgx_set_spare_enabled(bool on) { g_spare_enabled = on; }
 
 const sgnano_app_platform_t *sgnano_sgx_platform(void) { return &g_platform; }
 

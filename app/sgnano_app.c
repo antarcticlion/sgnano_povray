@@ -96,16 +96,21 @@ const char *sgnano_app_status_text(void)
     hms(eta, sizeof eta, (total > done && done) ? ((t - A.start_ms) / done) * (uint64_t)(total - done) : 0u);
     const double pct = total ? 100.0 * (double)done / (double)total : 0.0;
     const double msline = done ? (double)(t - A.start_ms) / (double)done : 0.0;
+    char bar[41];
+    const unsigned filled = total ? (unsigned)((done * 40u) / total) : 0u;
+    for (unsigned i = 0; i < 40u; i++) bar[i] = i < filled ? '#' : '-';
+    bar[40] = 0;
     snprintf(b, sizeof b,
              "POV-Ray 3.7  %s\n"
              "line %u/%u (%.1f%%)  first missing %u\n"
+             "[%s] %5.1f%%\n"
              "elapsed %s  ETA %s  %.1f ms/line\n"
              "checkpoint: %s  %s  png=%s",
              base_name(A.cfg.scene_path), (unsigned)done, (unsigned)total, pct,
-             (unsigned)A.hdr.first_missing, el, eta, msline,
+             (unsigned)A.hdr.first_missing, bar, pct, el, eta, msline,
              A.cfg.checkpoint_path ? base_name(A.cfg.checkpoint_path) : "(none)",
              A.ckp_error ? "ERROR" : (done >= total ? "complete" : "ok"),
-             (A.cfg.outputs & SGNANO_OUTPUT_PNG) ? (A.image_error ? "ERROR" : (A.image_saved ? "ok" : "-")) : "off");
+             (const char *)((A.cfg.outputs & SGNANO_OUTPUT_PNG) ? (A.image_error ? "ERROR" : (A.image_saved ? "ok" : "-")) : "off"));
     return b;
 }
 
@@ -283,6 +288,8 @@ bool sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t
         if (!A.plat.write_at(A.fh, A.file_size - 1u, &z, 1) || !A.plat.flush(A.fh)) goto fail;
     } else {
         // 既に描けたラインを FB へ戻す。ビットマップから数え直す。
+        // defer_fb_restore のときは、FB が使えるようになってから
+        // sgnano_app_restore_fb() で戻す（ストアを mode 1 で開くため）。
         uint32_t cnt = 0, first = cfg->height;
         for (uint32_t y = 0; y < cfg->height; y++) {
             if (!bit_get(A.hdr.bitmap, y)) {
@@ -290,9 +297,11 @@ bool sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t
                 continue;
             }
             cnt++;
-            const uint32_t off = SGNANO_CKP_LINE_OFFSET + y * A.hdr.line_bytes;
-            if (!A.plat.read_at(A.fh, off, A.linebuf, A.hdr.line_bytes)) { A.ckp_error = true; continue; }
-            A.plat.fb_put(0, y, A.linebuf, cfg->width);
+            if (!cfg->defer_fb_restore) {
+                const uint32_t off = SGNANO_CKP_LINE_OFFSET + y * A.hdr.line_bytes;
+                if (!A.plat.read_at(A.fh, off, A.linebuf, A.hdr.line_bytes)) { A.ckp_error = true; continue; }
+                A.plat.fb_put(0, y, A.linebuf, cfg->width);
+            }
             memset(A.coverage + (size_t)y * A.cov_bytes, 0xFF, A.cov_bytes);
             A.line_cells_done[y] = (uint16_t)A.cells_per_line;
         }
@@ -311,6 +320,23 @@ fail:
     free(A.coverage); free(A.linebuf);
     memset(&A, 0, sizeof A);
     return false;
+}
+
+bool sgnano_app_restore_fb(void)
+{
+    if (!A.inited || !A.plat.read_at || !A.plat.fb_put) return false;
+    for (uint32_t y = 0; y < A.cfg.height; y++) {
+        if (!bit_get(A.hdr.bitmap, y)) continue;
+        const uint32_t off = SGNANO_CKP_LINE_OFFSET + y * A.hdr.line_bytes;
+        if (!A.plat.read_at(A.fh, off, A.linebuf, A.hdr.line_bytes)) {
+            A.ckp_error = true;
+            maybe_status(true);
+            return false;
+        }
+        A.plat.fb_put(0, y, A.linebuf, A.cfg.width);
+    }
+    maybe_status(true);
+    return true;
 }
 
 uint32_t sgnano_app_resume_row(void) { return A.inited ? A.hdr.first_missing : 0u; }

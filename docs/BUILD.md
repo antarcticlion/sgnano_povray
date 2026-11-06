@@ -74,9 +74,33 @@ PNG は miniz の deflate（レベル 9）で可逆圧縮する。無圧縮で�
 - 1 ライン分の画素が揃ったら、RGB555 の 1 ラインをチェックポイントへ書く。
 - チェックポイントは「256 バイトのヘッダ＋480 ライン×1280 バイト」。
 - 再開時は `+SR<最初の未完成ライン>` を POV-Ray に渡し、既存のラインを FB に戻す。
-- 状態表示はホストでは stderr。SGX ではテキスト面に出す予定。
+- 状態表示はホストでは stderr。SGX ではテキスト面に進捗バーを出す。
 
 ## ターゲット（SGX）
 
-まだスタブ段階。sgnano 本体の ABI が止まっているため、`include/sgx4_api.h`
-のスタブ実装を用意し、ホストと同じ `app/sgnano_app.c` を使う予定。
+POV-Ray 本体の SGX フロントエンドはまだだが、アプリ層を実機で確かめる
+`povprobe.sgx` がある。
+
+```sh
+cmake -S . -B build_sgx -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+  -DSGNANO_BUILD_SGX_PROBE=ON
+ninja -C build_sgx povprobe
+```
+
+`build_sgx/sgx/povprobe.sgx` を実機の `B:/POVTEST` などへ置き、
+
+```sh
+RBRUN B:/POVTEST/povprobe.sgx	B:/POVTEST	fresh	120
+RBRUN B:/POVTEST/povprobe.sgx	B:/POVTEST	resume
+RBRUN B:/POVTEST/povprobe.sgx	B:/POVTEST	fresh
+```
+
+または `python3 tools/hw_probe.py`（3 パス＋PNG/生データ照合を自動化）。
+ドライブ文字は USB の再接続で変わるため、スクリプトは毎回 exFAT/NTFS の
+`POVTEST` を探し直す。詳しくは [`HW_PROBE.md`](HW_PROBE.md)。
+
+**ビルドの注意**: SDK の `sgx_libc.c` の `calloc` は GCC の
+`malloc`＋`memset(0)` → `calloc` 変換で無限再帰にコンパイルされることが
+ある。`sgx_add_program(... OPTIONS -fno-builtin)` で回避している
+（`-fno-builtin-calloc` だけでは足りない）。
