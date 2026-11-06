@@ -47,6 +47,16 @@ libc / libstdc++ は別。詳細は [`docs/PHASE0_SIZE.md`](docs/PHASE0_SIZE.md)
 コードは 1ページ FB の PSRAM に余裕で収まるため、最初は「コード常駐＋
 メッシュ／テクスチャだけブロックストア」で進められます。
 
+### テストシーン
+
+`tests/scenes/` に 12 本ある（建築・車・都市・砂漠・水中・宇宙・静物・
+クリスタル・森など）。色は sRGB で、反射・ガラス・発光を使う。
+
+- `00_fast_sphere.pov`: すぐ終わるスモークテスト
+- `11_slow_spheres.pov`: 10,000 球の重いテスト（640×480 では数分）
+- 一覧と使い方: [`tests/scenes/README.md`](tests/scenes/README.md)
+- まとめて描く: `tools/render_scenes.sh 320 240 build_host/scenes`
+
 ### 確認済みの動作
 
 - 640×480、1 スレッド、AA なし、4×4 ブロックで描画。
@@ -79,7 +89,7 @@ compat_arm/              単一スレッドターゲット用の Boost.Thread �
 docs/                    ビルド手順、上流からの変更点
 include/sgx4_api.h       SGX 4.0 ABI の案（MIT）
 platform/host/config.h   ホスト用 config.h
-tests/scenes/            テストシーン
+tests/scenes/            テストシーン 12 本（高速・低速を含む）
 tests/test_sgx_checkpoint.c  SGX スタブのチェックポイントテスト
 third_party/povray/      POV-Ray 3.7.0.10（AGPL、ローカルパッチあり）
 third_party/boost/       Boost 1.62.0 ヘッダ（Boost License）

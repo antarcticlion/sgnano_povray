@@ -27,6 +27,17 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \
 - 完成後にチェックポイントが消えること、FB の先頭と末尾の画素を確認。
 - 状態表示がテキスト面（ホストでは stdout）へ 4 行で出る。
 
+## テストシーン
+
+`tests/scenes/` に 12 本ある。`00_fast_sphere.pov` はスモークテスト、
+`11_slow_spheres.pov` は 10,000 球の重いテスト。一覧は
+`tests/scenes/README.md`。
+
+```sh
+python3 tools/run_host.py tests/scenes/03_car.pov build_host/car.ppm \
+  --width 640 --height 480
+```
+
 ## チェックポイント／再開のテスト
 
 1. 途中で強制終了する（0.6 秒で kill）:

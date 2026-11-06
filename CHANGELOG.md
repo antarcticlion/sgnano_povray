@@ -15,6 +15,9 @@
   CRC32, so a torn header write falls back to the previous generation.
 - Checkpoint flushes each completed line with `fflush` + `fsync` (SGX:
   `store_flush`).
+- Added 12 test scenes (vivid architectural, automotive, landscape, night city,
+  underwater, space, still life, crystal, forest) plus a deliberately fast
+  smoke-test scene and a 10,000-sphere slow scene.
 - Added SGX 4.0 overlay + block-store design notes and ABI proposal.
 - Added an SGX stub platform (`platform/sgx/sgx4_stub.h`,
   `app/sgx/sgnano_app_sgx.c`) using the proposed block-store API.
