@@ -10,7 +10,7 @@ ninja -C build_host
 
 rm -f build_host/smoke.png build_host/smoke.png.ckp
 python3 tools/run_host.py tests/scenes/simple.pov build_host/smoke.png \
-    --width 160 --height 120 --output png
+    --width 160 --height 120
 
 test -s build_host/smoke.png
 echo "host tests: ok"

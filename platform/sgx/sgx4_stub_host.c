@@ -25,6 +25,10 @@ typedef struct {
 static host_store_t g_stores[MAX_STORES];
 static uint16_t *g_fb;
 static uint32_t g_w, g_h;
+static uint8_t *g_spare_base;
+static void *g_spare[4];
+static unsigned g_spare_n;
+static uint32_t g_spare_bytes;
 
 static uint32_t h_ms(void)
 {
@@ -53,6 +57,50 @@ static uint16_t h_rgb(unsigned r, unsigned g, unsigned b)
 }
 
 static void *h_fb_page(int page) { return page == 0 ? g_fb : NULL; }
+
+static unsigned h_fb_borrow(void **pages, unsigned max, uint32_t *page_bytes)
+{
+    (void)pages; (void)max; (void)page_bytes;
+    return 0;
+}
+
+static void h_fb_return(void)
+{
+    free(g_spare_base);
+    g_spare_base = NULL;
+    g_spare_n = 0;
+    g_spare_bytes = 0;
+}
+
+static unsigned h_fb_lend_spare(int keep, void **pages, unsigned max, uint32_t *page_bytes)
+{
+    if (keep != 0 || g_spare_n || !pages || !max || max < 3) return 0;
+    const uint32_t bytes = 640u * 480u * 2u;
+    g_spare_base = (uint8_t *)calloc(3u, bytes);
+    if (!g_spare_base) return 0;
+    g_spare_bytes = bytes;
+    g_spare_n = 3;
+    for (unsigned i = 0; i < 3; i++) {
+        g_spare[i] = g_spare_base + (size_t)i * bytes;
+        pages[i] = g_spare[i];
+    }
+    if (page_bytes) *page_bytes = bytes;
+    return 3;
+}
+
+static void *h_scratch_alloc(uint32_t bytes)
+{
+    if (g_spare_n && g_spare_bytes && bytes <= g_spare_n * g_spare_bytes) return g_spare[0];
+    return malloc(bytes);
+}
+
+static void h_scratch_free(void *p)
+{
+    if (!p) return;
+    if (g_spare_base && (uint8_t *)p >= g_spare_base &&
+        (uint8_t *)p < g_spare_base + (size_t)g_spare_n * g_spare_bytes) return;
+    free(p);
+}
 
 static unsigned h_text_puts(unsigned x, unsigned y, const char *s, uint32_t attr)
 {
@@ -184,6 +232,8 @@ static const sgx4_stub_api_t g_api = {
     .set_mode = h_set_mode,
     .rgb = h_rgb,
     .fb_page = h_fb_page,
+    .fb_borrow = h_fb_borrow,
+    .fb_return = h_fb_return,
     .text_puts = h_text_puts,
     .text_clear = h_text_clear,
     .remove = h_remove,
@@ -195,6 +245,7 @@ static const sgx4_stub_api_t g_api = {
     .store_flush = h_store_flush,
     .store_stats = h_store_stats,
     .store_error = h_store_error,
+    .fb_lend_spare = h_fb_lend_spare,
     .store_close = h_store_close,
 };
 

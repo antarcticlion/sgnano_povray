@@ -35,6 +35,10 @@ int main(void)
         fprintf(stderr, "sgx host init failed\n");
         return 1;
     }
+    if (sgnano_sgx_spare_bytes() == 0) {
+        fprintf(stderr, "fb_lend_spare returned no pages\n");
+        return 1;
+    }
 
     sgnano_app_config_t cfg;
     memset(&cfg, 0, sizeof cfg);

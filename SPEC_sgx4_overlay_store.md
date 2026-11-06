@@ -10,7 +10,10 @@
 > `store_pin` / `store_unpin` は `store_get` / `store_release` に統合され、
 > `SGX_STORE_RAW` / `SGX_STORE_COMPRESS` は予約（`-SGX_ENOTSUP`）です。
 > 正式な型は [`third_party/sgnano/sgx_api.h`](third_party/sgnano/sgx_api.h)。
-> この文書は設計の経緯として残します。実装は正式 ABI に合わせています。
+> さらに ABI 4.0 には **`fb_lend_spare`**（mode 2 で余りの 3 ページ = 約 1.8MB を借りる）
+> が追加されました。この文書の「FB 1 ページの別の組み方」は、正式版では
+> `fb_lend_spare` で解決しています。この文書は設計の経緯として残します。
+> 実装は正式 ABI に合わせています。
 
 ---
 

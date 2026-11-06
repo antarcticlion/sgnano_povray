@@ -34,6 +34,11 @@ third_party/sgnano/sgx_api.h 正式 ABI 4.0 のヘッダ（byte-identical）
 
 - 画面: `set_mode(SGX_MODE_TEXT_FB)`（mode 2）。戻り値は `const char *` で、
   NULL が成功。
+- FB の余りページ: `fb_lend_spare(0, pages, 4, &page_bytes)` で mode 2 の
+  表示ページ 0 を残し、残り 3 ページ（約 1.8MB）を借りる。
+  - PNG の RGB 作業場が入る場合はそれを使い、入らなければ `malloc` に落とす。
+  - 借りている間は `set_mode` とページ切り替えをしない（このアプリは mode 2 固定）。
+  - 終了時に `fb_return()` で返す。
 - FB: `fb_page(0)` の 640×480 RGB555 を直接読み書きする。
 - テキスト面: `text_clear(attr)` と `text_puts(col,row,utf8,attr)` で
   0〜5 行目に状態を出す。背景は透過。
@@ -53,6 +58,7 @@ third_party/sgnano/sgx_api.h 正式 ABI 4.0 のヘッダ（byte-identical）
 | `fb_page` | `void *fb_page(int)` |
 | `text_puts` / `text_clear` | `unsigned text_puts(unsigned,unsigned,const char*,uint32_t)` / `void text_clear(uint32_t)` |
 | `store_open/get/release/prefetch/flush/stats/error/close` | 同名の `store_*` |
+| `fb_lend_spare` / `fb_return` | 同名の ABI 4.0 |
 | `write_file` | `int write_file(const char *, const void *, uint32_t)` |
 | `remove` | `int remove(const char *)` |
 | `ms` | `uint32_t ms(void)` |
@@ -62,6 +68,7 @@ third_party/sgnano/sgx_api.h 正式 ABI 4.0 のヘッダ（byte-identical）
 
 - 実機での起動・描画（実機が空くのを待つ）。
 - POV-Ray の SGX 用フロントエンド（`vfe/unix` の置き換え）。
+- 借りた FB の余りページを POV-Ray のヒープ／メッシュキャッシュへ渡すこと。
 - メッシュ／テクスチャのブロックストア化。
 - 実機のテキスト面レイアウト調整（文字数・行位置・色）。
 - 実機の PNG 保存先（USB / S:）の運用。

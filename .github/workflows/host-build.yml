@@ -27,5 +27,5 @@ jobs:
       - name: Render a smoke-test scene
         run: |
           python3 tools/run_host.py tests/scenes/simple.pov build_host/test.png \
-            --width 80 --height 60 --output png
+            --width 80 --height 60
           test -s build_host/test.png

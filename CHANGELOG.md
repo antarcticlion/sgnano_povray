@@ -21,8 +21,11 @@
 - Received and integrated the official sgnano SGX ABI 4.0 header
   (`third_party/sgnano/sgx_api.h`). The stub now uses the official
   `store_*` types, `SGX_EBUSY`, and the official function signatures.
+- Updated to the ABI 4.0 addition `fb_lend_spare`: mode 2 lends the three
+  spare FB pages (about 1.8MB) for the PNG RGB scratch and future POV-Ray heap.
 - Added selectable output: FB only, lossless PNG (miniz deflate level 9), or
-  both. `tools/run_host.py --output fb|png|both`.
+  both. The default is now `both`.
+  `tools/run_host.py --output fb|png|both`.
 - Added miniz 3.1.2 for portable PNG writing.
 - Added SGX 4.0 overlay + block-store design notes and ABI proposal.
 - Added an SGX stub platform (`platform/sgx/sgx4_stub.h`,

@@ -18,7 +18,7 @@
 #include <stdint.h>
 
 #define SGX_ABI_MAJOR 4
-#define SGX_ABI_MINOR 0                          // 4.0（2026-11-06）: ブロックストア（store_*）と SGX_EBUSY を足した。表の並びは 3.5 の後ろに足しただけ。
+#define SGX_ABI_MINOR 0                          // 4.0（2026-11-06）: ブロックストア（store_*）・FB の余りのページを借りる fb_lend_spare と SGX_EBUSY を足した。表の並びは 3.5 の後ろに足しただけ。
                                                  //      ファームは 3.x のプログラムもそのまま走らせる（SGX_ABI_COMPAT_MAJOR）。4.0 で組んだものは 4.x のファームだけ
                                                  // 3.5（2026-11-06）: stderr へ書く term_write_err を末尾に足した（3.4 は request_tracker）
                                                  // 3.3（2026-11-04）: 組み込みアプリの UI の訳（translate）と SGX_F_LOCALIZE を足した
@@ -541,6 +541,12 @@ struct sgx_api {
     int      (*store_flush)(int id);                          // 書いたブロックをすべて書き戻す（戻ったら機器に書けている）
     int      (*store_stats)(int id, sgx_store_stats_t *out);
     int      (*store_error)(int id);                          // 最後の誤り（-SGX_E*、無ければ 0）
+    // ==== ABI 4.0: FB の余りのページを借りる ====
+    // FB を表示しているモード（2・3・4）で、keep のページ（表示と書き込みをそこにする）を残して、残りのページ（各 600KB、
+    // いまは 3 ページ = 1.8MB）を PSRAM として借りる。番地はキャッシュを通る窓。借りたページ数を返す（モードが違う・もう借りている・keep が悪いと 0）。
+    // 借りている間は、借りたページへの set_disp_page / set_write_page・fb_page・fb_blit の元は効かず、set_mode は断る。
+    // 返すのは fb_return（黒で消す）か、プログラムの終わり。FB を使わないモードで全ページを借りるのは今までどおり fb_borrow
+    unsigned (*fb_lend_spare)(int keep, void **pages, unsigned max, uint32_t *page_bytes);
 };
 
 // ---- SDK のヒープ（2026-11-03）----

@@ -62,9 +62,9 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.png \
 
 | 値 | 意味 |
 |---|---|
-| `png` | 可逆圧縮 PNG を保存（既定） |
+| `png` | 可逆圧縮 PNG を保存 |
 | `fb` | ファイルを作らず、FB に描くだけ |
-| `both` | PNG を保存し、FB にも残す |
+| `both` | PNG を保存し、FB にも残す（既定） |
 
 PNG は miniz の deflate（レベル 9）で可逆圧縮する。無圧縮ではない。
 

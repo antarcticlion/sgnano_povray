@@ -15,8 +15,9 @@ POV-Ray 3.7 を sgnano（RP2350 のビデオコンソール）の **SGX アプ�
 | ホスト版のビルド | 完了（`build_host/povray_host`） |
 | 簡単なシーンの描画 | 完了（`tests/scenes/simple.pov`） |
 | チェックポイント／再開 | 完了（ホストで途中終了→再開→完成画像の一致を確認） |
-| SGX 4.0 ABI | 正式版を受領（`third_party/sgnano/sgx_api.h`、ブロックストア） |
+| SGX 4.0 ABI | 正式版を受領（`third_party/sgnano/sgx_api.h`、ブロックストア＋`fb_lend_spare`） |
 | SGX 側のスタブ | 正式 ABI 4.0 の型に更新済み（`platform/sgx/sgx4_stub.h`、`app/sgx/`） |
+| FB の余りページ | `fb_lend_spare` で 3 ページ（約1.8MB）を借り、PNG 作業場に使用 |
 | 出力 | FB / 可逆圧縮 PNG（miniz）を選択可能 |
 | ARM サイズ測定 | 完了（`source/` 全体で 1.41MB、libc 別） |
 
@@ -31,7 +32,7 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.png \
 ```
 
 `--output` は `fb`（画面に残すだけ）、`png`（可逆圧縮 PNG を保存）、
-`both`（PNG＋FB）から選べる。既定は `png`。
+`both`（PNG＋FB）から選べる。既定は `both`。
 
 途中で止めても、同じコマンドで続きから描画します。詳しくは
 [`docs/BUILD.md`](docs/BUILD.md)。
@@ -73,9 +74,12 @@ libc / libstdc++ は別。詳細は [`docs/PHASE0_SIZE.md`](docs/PHASE0_SIZE.md)
 RP2350 の Cortex-M33 には MMU がないため、一般的な透過ページングは作れない。
 そこで SGX 4.0 では次の形にする。
 
-- **プログラム**: 常駐コア＋固定スロットのオーバーレイ。
+- **プログラム**: 正式 ABI 4.0 では常駐（ARM の `-Os` で約 1.4MB、libc 別）。
+  オーバーレイは 4.x で必要になったら足す。
 - **ヒープ**: ハンドル付きブロックストア（メッシュ、テクスチャ、シーン DB）。
 - **画面**: POV-Ray の画像バッファ（20B/画素）を持たず、RGB555 で FB へ直接書く。
+  mode 2 の余り 3 ページ（約 1.8MB）は `fb_lend_spare` で借り、PNG の作業場と
+  将来の POV-Ray ヒープに使う。
 
 詳細は [`SPEC_sgx4_overlay_store.md`](SPEC_sgx4_overlay_store.md) と
 [`docs/SGX_STUB.md`](docs/SGX_STUB.md)、sgnano 側の引き渡し

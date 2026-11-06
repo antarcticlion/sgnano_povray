@@ -87,6 +87,9 @@ static void h_status(const char *text)
     fflush(stderr);
 }
 
+static void *h_scratch_alloc(uint32_t bytes) { return malloc(bytes); }
+static void h_scratch_free(void *p) { free(p); }
+
 static bool h_save_bytes(const char *path, const void *data, uint32_t len)
 {
     if (!path || !data) return false;
@@ -109,6 +112,8 @@ static const sgnano_app_platform_t g_platform = {
     .now_ms = h_now_ms,
     .status = h_status,
     .save_bytes = h_save_bytes,
+    .scratch_alloc = h_scratch_alloc,
+    .scratch_free = h_scratch_free,
 };
 
 bool sgnano_host_init(uint32_t width, uint32_t height)

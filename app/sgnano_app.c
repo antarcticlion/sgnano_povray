@@ -157,7 +157,8 @@ static void finalize_if_done(void)
     if (!A.image_saved) {
         if ((A.cfg.outputs & SGNANO_OUTPUT_PNG) && A.cfg.image_path && A.plat.save_bytes) {
             const size_t n = (size_t)A.cfg.width * A.cfg.height * 3u;
-            uint8_t *rgb = (uint8_t *)malloc(n);
+            uint8_t *rgb = A.plat.scratch_alloc ? (uint8_t *)A.plat.scratch_alloc((uint32_t)n)
+                                                : (uint8_t *)malloc(n);
             if (!rgb) A.image_error = true;
             if (rgb) {
                 for (uint32_t y = 0; y < A.cfg.height; y++) {
@@ -181,7 +182,7 @@ static void finalize_if_done(void)
                 } else {
                     A.image_error = true;
                 }
-                free(rgb);
+                if (A.plat.scratch_free) A.plat.scratch_free(rgb); else free(rgb);
             }
         }
         A.image_saved = true;
@@ -238,7 +239,7 @@ bool sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t
     memset(&A, 0, sizeof A);
     A.cfg = *cfg;
     A.plat = *plat;
-    if (!A.cfg.outputs) A.cfg.outputs = SGNANO_OUTPUT_FB;
+    if (!A.cfg.outputs) A.cfg.outputs = SGNANO_OUTPUT_FB | SGNANO_OUTPUT_PNG;
     A.cfg.block_size = cfg->block_size;
     A.cells_per_line = (cfg->width + cfg->block_size - 1u) / cfg->block_size;
     A.cov_bytes = (A.cells_per_line + 7u) / 8u;

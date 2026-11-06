@@ -50,6 +50,10 @@ typedef struct {
 
     // 完成した PNG などのバイト列を保存する（NULL 可）。
     bool (*save_bytes)(const char *path, const void *data, uint32_t len);
+
+    // PNG の RGB 作業場。SGX では FB の余りページを優先する（NULL 可）。
+    void *(*scratch_alloc)(uint32_t bytes);
+    void  (*scratch_free)(void *p);
 } sgnano_app_platform_t;
 
 typedef struct {

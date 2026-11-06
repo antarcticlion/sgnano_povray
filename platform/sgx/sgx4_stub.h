@@ -26,6 +26,8 @@ typedef struct {
     const char *(*set_mode)(int mode);
     uint16_t (*rgb)(unsigned r, unsigned g, unsigned b);
     void    *(*fb_page)(int page);
+    unsigned (*fb_borrow)(void **pages, unsigned max, uint32_t *page_bytes);
+    void     (*fb_return)(void);
     void     (*text_clear)(uint32_t attr);
     unsigned (*text_puts)(unsigned col, unsigned row, const char *utf8, uint32_t attr);
 
@@ -41,6 +43,9 @@ typedef struct {
     int      (*store_flush)(int id);
     int      (*store_stats)(int id, sgx_store_stats_t *out);
     int      (*store_error)(int id);
+
+    // ABI 4.0: FB の余りのページ（mode 2 で keep 以外の 3 ページ = 約 1.8MB）。
+    unsigned (*fb_lend_spare)(int keep, void **pages, unsigned max, uint32_t *page_bytes);
 } sgx4_stub_api_t;
 
 extern const sgx4_stub_api_t *sgx4;

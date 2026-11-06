@@ -6,7 +6,9 @@
 > `third_party/sgnano/sgx_api.h` に公式ヘッダのスナップショットを置いた。
 > `platform/sgx/sgx4_stub.h` と `app/sgx/sgnano_app_sgx.c` は公式の型・シグネチャ
 > （`sgx_store_config_t`、`SGX_STORE_*`、`SGX_EBUSY`、`set_mode` の戻り値など）に更新済み。
-> 実機テストは sgnano 本体が空いてから行う。
+> **追記**: ABI 4.0 に `fb_lend_spare`（mode 2 で余りの 3 ページ = 約 1.8MB を借りる）
+> が追加された。アプリは mode 2 のページ 0 を残して 3 ページを借り、PNG の RGB
+> 作業場と将来の POV-Ray ヒープに使う。実機テストは sgnano 本体が空いてから行う。
 
 - **正本（型と関数の表）**: `~/Project/sgnano/sdk/sgx/include/sgx_api.h`（MIT）。このリポジトリに写しは置かない（写すと食い違うので、SDK をそのまま使う）
 - **説明**: `~/Project/sgnano/docs/sgx_abi.md` の §5.16（ブロックストア）・§3（読み込み）・§7（版）・§9（素案からの決め方）
@@ -22,13 +24,14 @@
 | `.SGX4`（magic `"SGX4"`、モジュール表・ストア表） | **使わない。今までの `.sgx`（`"SGX1"`）**。見出しの `abi_major = 4` |
 | オーバーレイ `overlay_*` | **4.0 には無い**（POV-Ray が約 1.4MB と測れたので常駐で足りる。要るときに 4.x で足す） |
 | `store_open/close/get/release/prefetch/flush/stats/error` | **ある**（下の §2） |
+| （素案に無い）FB の余りのページ | **`fb_lend_spare` を足した**（§2b）。モード 2 で 1 ページを表示し、残り 3 ページ（1.8MB）を PSRAM として借りる |
 | `store_pin` / `store_unpin` | 無い（`store_get` = 取り出し、`store_release` = 返す、で同じこと） |
 | 型の名前 `sgx4_store_config_t` / `sgx4_store_stats_t`、印 `SGX4_STORE_*` | **`sgx_store_config_t` / `sgx_store_stats_t`、`SGX_STORE_*`**（`sgx_api.h` の中） |
 | `sgx4_store_config_t.lba`・`SGX4_STORE_RAW` | `lba` は無い（`reserved[3]`、0 にする）。`SGX_STORE_RAW`・`SGX_STORE_COMPRESS` は予約で `-SGX_ENOTSUP` |
 | 誤り `SGX4_EBUSY = 64` ほか | **`SGX_EBUSY = 14`**（`SGX_E*` の続き）。媒体の誤り・抜けた・時間切れは `SGX_EIO` / `SGX_ENODEV` |
 | ブロック 4KB〜256KB | 512 B〜256KB（2 のべき乗） |
 | 作るときに中身を書かない | **0 で埋めて作る**（中身が決まる。USB メモリで 1MB に約 2 秒） |
-| FB 1 ページの別の組み方 | しない（いまの FB 4 ページで、実機の空きを測る。§4） |
+| FB 1 ページの別の組み方 | しない。代わりに `fb_lend_spare`（§2b）。実機の空きは §4 |
 
 **3.x との関係**: 4.x のファームは 3.x で組んだ `.sgx` もそのまま走らせる（表は 3.5 の末尾に足しただけ）。4.0 で組んだものは 3.x のファームでは読み込まない。
 `api->size` を見て新しい欄があるか確かめる（例 `api->size >= offsetof(sgx_api_t, store_error) + sizeof(void *)`）。
@@ -75,6 +78,19 @@ int   (*store_error)(int id);                                   // 最後の誤�
 
 ---
 
+## 2b. FB の余りのページ（`fb_lend_spare`）
+
+```c
+unsigned (*fb_lend_spare)(int keep, void **pages, unsigned max, uint32_t *page_bytes);
+```
+
+- モード 2・3・4 で、`keep` のページを表示・書き込みのページにして、残りのページ（各 614,400 B、いまは 3 ページ）を貸す。番地はキャッシュを通る窓。借りた数を返す
+- 借りている間: 借りたページへの `set_disp_page` / `set_write_page` は効かない、`fb_page(借りたページ)` は NULL、`set_mode` は断る（文字列を返す）
+- `fb_return()` で返す（黒で消す）。プログラムが終われば返る
+- POV-Ray なら: `set_mode(SGX_MODE_TEXT_FB)` -> `fb_lend_spare(0, pages, 3, &bytes)` -> 3 ページをヒープやストアのキャッシュに使い、`fb_page(0)` に描く
+
+---
+
 ## 3. いまのスタブ（`platform/sgx/sgx4_stub.h`）からの置き換え
 
 | スタブ | 正式 |
@@ -93,7 +109,29 @@ int   (*store_error)(int id);                                   // 最後の誤�
 
 ---
 
-## 4. 実装の状態（sgnano 側）
+## 4. 実装の状態（sgnano 側、2026-11-06）
 
-- ファーム: `src/sgx/sgx_store.c`（ストア）・`src/sgx/sgx.c`（API の口・直に読む読み込み）・`src/ruby/rbfs.c`（`rbfs_ra_write`）・`src/input/usbfat.c`（`usbfat_raw_write`）
-- 実機の試し・PSRAM の空きの実測は、この下に追記する
+- ファーム: `src/sgx/sgx_store.c`（ストア）・`src/sgx/sgx.c`（API の口・直に読む読み込み・`fb_lend_spare`）・`src/ruby/rbfs.c`（`rbfs_ra_write`）・`src/input/usbfat.c`（`usbfat_raw_write`）。実機に書き込み済み
+- **実機の試し**（HDD の FAT32・exFAT・NTFS、`storetest.sgx`）: 3 つとも **47/47 PASS**（作る・書き戻し・読むだけで開き直す・2MB の乱数の読み書き 200 回・先読み・誤りの返し方 17 通り・`fb_lend_spare`）。
+  プログラムの終わりの書き戻し（`keep` -> `check`）も PASS。3.x で組んだ `.sgx`（`ps`・`mem`）もそのまま走る
+- **大きな像**: 1.5MB の `.sgx`（`bigtest.sgx`）がファイラーから走る（以前は 1MB で断っていた）
+- **速さ**（FB なし）: 4KB の外れ 1 回 最長 約 32ms、64KB の外れ 1 回 最長 約 190ms。2MB を作る（0 で埋める）のに 2.3〜3.3 秒
+
+### PSRAM の空き（実機、2026-11-06）
+
+| 走らせ方 | プログラムが走っている間の空き |
+|---|---|
+| **ファイラーから**（1.5MB の像を置いたあと） | **約 2.0MB**（いちばん大きい塊 約 1.95MB）。像を合わせると、プログラムが使えるのは約 3.5MB |
+| シェル sgsh の子として | 約 0.9MB（シェルが 2MB のヒープを持っている）。**POV-Ray はファイラーから走らせる** |
+| モード 2 で `fb_lend_spare(0, …)` | **さらに +1.8MB**（600KB x 3） |
+
+POV-Ray の見積もり（像 約 2MB・スタック 192KB・ヒープ・ストアのキャッシュ）は、ファイラーから走らせて `fb_lend_spare` を使えば約 5.3MB の中に収める形になる。
+ストアのキャッシュは、借りたページとは別に `cache_blocks x block_size` を PSRAM から取る（`store_open` の中で取るので、借りたページは使わない）。
+ほかに exFAT・NTFS のドライブを開いていると、そのキャッシュ（約 2.2MB）が PSRAM を使う。
+
+### sgnano_povray の実機テストで見てほしいこと
+
+1. `store_*` をスタブから正式版へ置き換えて、チェックポイント（4KB・キャッシュ 8・`WRITEBACK | CREATE`）が書けて、もう一度走らせたとき読めるか
+2. POV-Ray の `.sgx` の大きさ（libc / libstdc++ を結んだあと）と、ファイラーから走らせたときに入るか（入らなければ大きさと、`mem_info` の空きを知らせてほしい）
+3. `fb_lend_spare` で借りたページをヒープに使えるか
+4. 足りない口・使いにくい口（例: 先読みを裏で進めたい、ブロックの大きさの上限、C++ の実行時の部品）

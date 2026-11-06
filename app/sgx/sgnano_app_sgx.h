@@ -15,6 +15,10 @@ bool sgnano_sgx_init(uint32_t width, uint32_t height);
 const sgnano_app_platform_t *sgnano_sgx_platform(void);
 void sgnano_sgx_shutdown(void);
 
+// ABI 4.0 の fb_lend_spare で借りた FB の余りページ（連続しているとは限らない）。
+void *sgnano_sgx_spare_base(void);
+uint32_t sgnano_sgx_spare_bytes(void);
+
 #ifdef __cplusplus
 }
 #endif

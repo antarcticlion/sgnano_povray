@@ -6,7 +6,7 @@
   tools/run_host.py tests/scenes/simple.pov build/simple.png --status
   tools/run_host.py tests/scenes/simple.pov build/simple.png --fresh
 
---output png（既定）は可逆圧縮 PNG、fb は画面だけ、both は両方。
+--output both（既定）は PNG＋FB、png は PNG だけ、fb は画面だけ。
 チェックポイントは <出力>.ckp。途中で終了したら、次回は最初の未完成ラインから再開する。
 完成したチェックポイントがあれば、POV-Ray を走らせずに PNG を書き出す。
 """
@@ -124,7 +124,7 @@ def main() -> int:
     ap.add_argument("--block", type=int, default=4)
     ap.add_argument("--include", default="third_party/povray/include")
     ap.add_argument("--exe", default="build_host/povray_host")
-    ap.add_argument("--output", choices=("fb", "png", "both"), default="png",
+    ap.add_argument("--output", choices=("fb", "png", "both"), default="both",
                     help="fb = leave on screen, png = save a lossless PNG, both = PNG + FB")
     ap.add_argument("--fresh", action="store_true")
     ap.add_argument("--status", action="store_true")

@@ -18,6 +18,9 @@ typedef struct {
 static uint16_t *g_fb;
 static uint32_t g_w, g_h;
 static bool g_text_cleared;
+static void *g_spare[4];
+static unsigned g_spare_n;
+static uint32_t g_spare_bytes;
 
 static uint32_t min_u32(uint32_t a, uint32_t b) { return a < b ? a : b; }
 
@@ -98,6 +101,34 @@ static bool s_save_bytes(const char *path, const void *data, uint32_t len)
     return sgx4 && sgx4->write_file && sgx4->write_file(path, data, len) == 0;
 }
 
+static bool spare_contains(const void *p)
+{
+    if (!g_spare_n || !g_spare_bytes) return false;
+    const uint8_t *q = (const uint8_t *)p;
+    for (unsigned i = 0; i < g_spare_n; i++)
+        if (q >= (const uint8_t *)g_spare[i] && q < (const uint8_t *)g_spare[i] + g_spare_bytes)
+            return true;
+    return false;
+}
+
+static void *s_scratch_alloc(uint32_t bytes)
+{
+    // FB の余りページが連続していれば、PNG の RGB 作業場に使う。
+    if (g_spare_n && g_spare_bytes && bytes <= g_spare_n * g_spare_bytes) {
+        bool contig = true;
+        for (unsigned i = 1; i < g_spare_n; i++)
+            if ((uint8_t *)g_spare[i] != (uint8_t *)g_spare[i - 1] + g_spare_bytes) contig = false;
+        if (contig) return g_spare[0];
+    }
+    return malloc(bytes);
+}
+
+static void s_scratch_free(void *p)
+{
+    if (!p) return;
+    if (!spare_contains(p)) free(p);
+}
+
 static void s_fb_put(uint32_t x, uint32_t y, const uint16_t *pixels, uint32_t n)
 {
     if (!g_fb || y >= g_h || x >= g_w) return;
@@ -149,6 +180,8 @@ static const sgnano_app_platform_t g_platform = {
     .now_ms = s_now_ms,
     .status = s_status,
     .save_bytes = s_save_bytes,
+    .scratch_alloc = s_scratch_alloc,
+    .scratch_free = s_scratch_free,
 };
 
 bool sgnano_sgx_init(uint32_t width, uint32_t height)
@@ -160,6 +193,10 @@ bool sgnano_sgx_init(uint32_t width, uint32_t height)
     g_w = width;
     g_h = height;
     g_text_cleared = false;
+    g_spare_n = 0;
+    g_spare_bytes = 0;
+    if (sgx4->fb_lend_spare)
+        g_spare_n = sgx4->fb_lend_spare(0, g_spare, 4, &g_spare_bytes);
     return true;
 }
 
@@ -167,7 +204,14 @@ const sgnano_app_platform_t *sgnano_sgx_platform(void) { return &g_platform; }
 
 void sgnano_sgx_shutdown(void)
 {
+    if (g_spare_n && sgx4 && sgx4->fb_return) sgx4->fb_return();
+    for (unsigned i = 0; i < 4; i++) g_spare[i] = NULL;
+    g_spare_n = 0;
+    g_spare_bytes = 0;
     g_fb = NULL;
     g_w = g_h = 0;
     g_text_cleared = false;
 }
+
+void *sgnano_sgx_spare_base(void) { return g_spare_n ? g_spare[0] : NULL; }
+uint32_t sgnano_sgx_spare_bytes(void) { return g_spare_n * g_spare_bytes; }
