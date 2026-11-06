@@ -12,5 +12,11 @@
 - Verified host checkpoint/resume: killed at 32/480 lines, resumed, and the
   final PPM matched a fresh render byte-for-byte.
 - Added SGX 4.0 overlay + block-store design notes and ABI proposal.
+- Added an SGX stub platform (`platform/sgx/sgx4_stub.h`,
+  `app/sgx/sgnano_app_sgx.c`) using the proposed block-store API.
+- Added `test_sgx_checkpoint`, a host test of the SGX stub's checkpoint/store
+  path (10 lines, stop, resume, complete).
+- Added an ARM size-measurement build (`SGNANO_BUILD_ARM_SIZE`) and
+  single-thread Boost compatibility stubs.
 - Documented all local changes to upstream in `docs/UPSTREAM_CHANGES.md`
   and `third_party/povray/patches/`.

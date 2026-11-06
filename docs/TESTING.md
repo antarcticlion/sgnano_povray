@@ -13,6 +13,20 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \
 - `build_host/test.ppm` ができる。
 - 完成すると `build_host/test.ppm.ckp` は消える。
 
+## SGX スタブのチェックポイントテスト
+
+`test_sgx_checkpoint` は、SGX スタブの関数表（メモリ FB、テキスト出力、
+ブロックストア）の上で `app/sgnano_app.c` を動かす。
+
+```sh
+./build_host/test_sgx_checkpoint
+```
+
+- 160×120 で 10 ライン描いて終了し、チェックポイントが残ることを確認。
+- 再初期化して 10 行目から再開し、120 ラインまで描く。
+- 完成後にチェックポイントが消えること、FB の先頭と末尾の画素を確認。
+- 状態表示がテキスト面（ホストでは stdout）へ 4 行で出る。
+
 ## チェックポイント／再開のテスト
 
 1. 途中で強制終了する（0.6 秒で kill）:

@@ -21,6 +21,9 @@ jobs:
       - name: Build
         run: ninja -C build_host
 
+      - name: SGX checkpoint stub test
+        run: ./build_host/test_sgx_checkpoint
+
       - name: Render a smoke-test scene
         run: |
           python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \

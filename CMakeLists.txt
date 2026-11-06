@@ -48,3 +48,54 @@ target_compile_options(povray_host PRIVATE
 )
 
 target_link_libraries(povray_host PRIVATE m pthread png jpeg z)
+
+if(NOT CMAKE_CROSSCOMPILING)
+    add_executable(test_sgx_checkpoint
+        tests/test_sgx_checkpoint.c
+        app/sgnano_app.c
+        app/sgx/sgnano_app_sgx.c
+        platform/sgx/sgx4_stub_host.c
+    )
+    target_include_directories(test_sgx_checkpoint PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/sgx"
+    )
+    target_link_libraries(test_sgx_checkpoint PRIVATE m)
+endif()
+
+# ARM (RP2350) のサイズ測定用。リンクはせず、オブジェクトの合計サイズを見る。
+option(SGNANO_BUILD_ARM_SIZE "Compile POV-Ray core for ARM size measurement" OFF)
+if(SGNANO_BUILD_ARM_SIZE)
+    add_library(povray_arm_size OBJECT ${POVRAY_CORE_SOURCES})
+    target_include_directories(povray_arm_size PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/compat_arm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/arm"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost"
+        "${POVRAY_DIR}/source"
+        "${POVRAY_DIR}/source/backend"
+        "${POVRAY_DIR}/source/base"
+        "${POVRAY_DIR}/source/frontend"
+        "${POVRAY_DIR}/vfe"
+        "${POVRAY_DIR}/vfe/unix"
+        "${POVRAY_DIR}/unix"
+    )
+    target_compile_definitions(povray_arm_size PRIVATE HAVE_CONFIG_H=1)
+    target_compile_options(povray_arm_size PRIVATE
+        -Os -ffunction-sections -fdata-sections
+        -Wno-deprecated-declarations -Wno-unused-parameter
+        -Wno-unused-variable -Wno-sign-compare -Wno-write-strings
+    )
+
+    # アプリ共通層＋SGX スタブのコンパイル確認（リンクはしない）。
+    add_library(sgnano_arm_app OBJECT
+        "${CMAKE_CURRENT_SOURCE_DIR}/app/sgnano_app.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/app/sgx/sgnano_app_sgx.c"
+    )
+    target_include_directories(sgnano_arm_app PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+        "${CMAKE_CURRENT_SOURCE_DIR}/include"
+        "${CMAKE_CURRENT_SOURCE_DIR}/platform/sgx"
+    )
+    target_compile_options(sgnano_arm_app PRIVATE -Os -ffunction-sections -fdata-sections)
+endif()

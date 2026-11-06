@@ -1,5 +1,5 @@
 # generated from third_party/povray/source/Makefile.am and vfe/Makefile.am
-set(POVRAY_SOURCES
+set(POVRAY_CORE_SOURCES
     ${POVRAY_DIR}/source/optout.cpp
     ${POVRAY_DIR}/source/backend/render/radiositytask.cpp
     ${POVRAY_DIR}/source/backend/render/tracepixel.cpp
@@ -142,6 +142,10 @@ set(POVRAY_SOURCES
     ${POVRAY_DIR}/source/base/fileinputoutput.cpp
     ${POVRAY_DIR}/source/base/timer.cpp
     ${POVRAY_DIR}/source/lightgrp.cpp
+)
+
+set(POVRAY_SOURCES
+    ${POVRAY_CORE_SOURCES}
     ${POVRAY_DIR}/unix/disp_text.cpp
 )
 

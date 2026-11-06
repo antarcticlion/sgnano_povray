@@ -16,7 +16,7 @@ POV-Ray 3.7 を sgnano（RP2350 のビデオコンソール）の **SGX アプ�
 | 簡単なシーンの描画 | 完了（`tests/scenes/simple.pov`） |
 | チェックポイント／再開 | 完了（ホストで途中終了→再開→完成画像の一致を確認） |
 | SGX 4.0 ABI の設計 | 案を作成（`SPEC_sgx4_overlay_store.md`） |
-| SGX 側のスタブ | これから |
+| SGX 側のスタブ | 実装済み（`platform/sgx/sgx4_stub.h`、`app/sgx/`） |
 
 ## クイックスタート（ホスト）
 
@@ -48,18 +48,23 @@ RP2350 の Cortex-M33 には MMU がないため、一般的な透過ページ�
 - **画面**: POV-Ray の画像バッファ（20B/画素）を持たず、RGB555 で FB へ直接書く。
 
 詳細は [`SPEC_sgx4_overlay_store.md`](SPEC_sgx4_overlay_store.md) と
-[`include/sgx4_api.h`](include/sgx4_api.h)。
+[`include/sgx4_api.h`](include/sgx4_api.h)。SGX 側のスタブは
+[`docs/SGX_STUB.md`](docs/SGX_STUB.md)。
 
 ## リポジトリ構成
 
 ```
 app/                     sgnano アプリ共通層（チェックポイント、状態、ホスト FB）
+app/sgx/                 SGX スタブ用のプラットフォーム実装
+platform/sgx/            正式 ABI が来るまでの SGX 関数表
 cmake/                   上流 Makefile.am から生成したソース一覧
 compat/                  Boost.Thread / jversion のホスト互換層
+compat_arm/              単一スレッドターゲット用の Boost.Thread スタブ
 docs/                    ビルド手順、上流からの変更点
 include/sgx4_api.h       SGX 4.0 ABI の案（MIT）
 platform/host/config.h   ホスト用 config.h
 tests/scenes/            テストシーン
+tests/test_sgx_checkpoint.c  SGX スタブのチェックポイントテスト
 third_party/povray/      POV-Ray 3.7.0.10（AGPL、ローカルパッチあり）
 third_party/boost/       Boost 1.62.0 ヘッダ（Boost License）
 tools/run_host.py        チェックポイント付き実行ラッパー
