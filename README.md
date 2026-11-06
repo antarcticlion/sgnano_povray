@@ -17,6 +17,7 @@ POV-Ray 3.7 を sgnano（RP2350 のビデオコンソール）の **SGX アプ�
 | チェックポイント／再開 | 完了（ホストで途中終了→再開→完成画像の一致を確認） |
 | SGX 4.0 ABI の設計 | 案を作成（`SPEC_sgx4_overlay_store.md`） |
 | SGX 側のスタブ | 実装済み（`platform/sgx/sgx4_stub.h`、`app/sgx/`） |
+| ARM サイズ測定 | 完了（`source/` 全体で 1.41MB、libc 別） |
 
 ## クイックスタート（ホスト）
 
@@ -30,6 +31,21 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.ppm \
 
 途中で止めても、同じコマンドで続きから描画します。詳しくは
 [`docs/BUILD.md`](docs/BUILD.md)。
+
+### ARM サイズ（Phase 0）
+
+`arm-none-eabi-g++ -Os` で `source/` 全体（142 オブジェクト）をコンパイルした結果:
+
+| 区分 | サイズ |
+|---|---:|
+| `.text` | 1,234,352 B |
+| `.data` | 35,750 B |
+| `.bss` | 137,042 B |
+| **合計** | **1,407,144 B** |
+
+libc / libstdc++ は別。詳細は [`docs/PHASE0_SIZE.md`](docs/PHASE0_SIZE.md)。
+コードは 1ページ FB の PSRAM に余裕で収まるため、最初は「コード常駐＋
+メッシュ／テクスチャだけブロックストア」で進められます。
 
 ### 確認済みの動作
 

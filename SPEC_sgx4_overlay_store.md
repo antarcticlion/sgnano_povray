@@ -579,6 +579,12 @@ const char *sgx4_session_start(const char *path, const char *dir,
 - パーサとレンダラは時間的に分かれるので、同じスロットを再利用できる。
 - **攻めの分割**にするなら、形状をモジュール化し、オブジェクトを「型＋データ」に変えて vtable をなくす。常駐 1.5〜2.0MB、モジュール 1〜2MB にできるが、POV-Ray のソース改造が大きくなる。第1段階では安全側で始める。
 
+【2026-11-06 実測】`source/` 全体を `arm-none-eabi-g++ -Os` でコンパイルすると
+**1,407,144 B**（.text 1,234,352 B、.data 35,750 B、.bss 137,042 B、libc 別）。
+コードのオーバーレイはサイズだけなら必須ではない。最初は **コード常駐＋
+メッシュ／テクスチャだけブロックストア**で進め、PSRAM を節約したくなったら
+オーバーレイを足す。詳細は `docs/PHASE0_SIZE.md`。
+
 ### 7.2 Boost / スレッドの除去
 
 POV-Ray 3.7 は Boost.Thread / condition / date_time / format / bind / unordered_map を使います。ベアメタルでは次に置き換えます。

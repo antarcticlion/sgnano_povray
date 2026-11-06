@@ -18,5 +18,7 @@
   path (10 lines, stop, resume, complete).
 - Added an ARM size-measurement build (`SGNANO_BUILD_ARM_SIZE`) and
   single-thread Boost compatibility stubs.
+- Measured the ARM `source/` core at 1,407,144 B total (text 1,234,352 B,
+  data 35,750 B, bss 137,042 B) with `-Os`; libc/libstdc++ not included.
 - Documented all local changes to upstream in `docs/UPSTREAM_CHANGES.md`
   and `third_party/povray/patches/`.
