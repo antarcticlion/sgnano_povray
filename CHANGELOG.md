@@ -48,6 +48,8 @@
   `B:/POVTEST/renders`, and the logs to `B:/POVTEST/renders/logs`.
 - Verified 12 rendered PNGs in the real device's filer image viewer; the
   336KB `11_slow_spheres.png` is measured with a 5-minute cap.
+- Added `docs/HANDOFF_SGX_FRONTEND.md`: interface, build flags, real-device
+  quirks, and the remaining frontend work for a separate agent.
 - Added miniz 3.1.2 for portable PNG writing.
 - Added SGX 4.0 overlay + block-store design notes and ABI proposal.
 - Added an SGX stub platform (`platform/sgx/sgx4_stub.h`,

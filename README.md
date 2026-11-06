@@ -136,6 +136,11 @@ RP2350 の Cortex-M33 には MMU がないため、一般的な透過ページ�
   mode 2 の余り 3 ページ（約 1.8MB）は `fb_lend_spare` で借り、PNG の作業場と
   将来の POV-Ray ヒープに使う。ページは番地の順に並べ替えてから使う。
 
+POV-Ray 本体の SGX フロントエンド（`vfe/unix` の置き換え、単一スレッド Task、
+ファイル I/O）は別担当向けに
+[`docs/HANDOFF_SGX_FRONTEND.md`](docs/HANDOFF_SGX_FRONTEND.md)
+へ引き継ぎ済みです。
+
 詳細は [`SPEC_sgx4_overlay_store.md`](SPEC_sgx4_overlay_store.md) と
 [`docs/SGX_STUB.md`](docs/SGX_STUB.md)、sgnano 側の引き渡し
 [`docs/SGX_ABI4_FORMAL.md`](docs/SGX_ABI4_FORMAL.md)。正式 ABI 4.0 は
