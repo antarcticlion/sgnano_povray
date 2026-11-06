@@ -1,0 +1,23 @@
+--- a/source/backend/parser/parsestr.cpp
++++ b/source/backend/parser/parsestr.cpp
+@@ -33,8 +33,7 @@
+ 
+ #include <stdlib.h>
+ #include <ctype.h>
+-
+-#include <boost/date_time/posix_time/posix_time.hpp>
++#include <time.h>       /* sgnano_povray: gmtime_r */
+ 
+ // frame.h must always be the first POV file included (pulls in platform config)
+ #include "backend/frame.h"
+@@ -514,7 +513,9 @@
+ 	// if it's called, they can.
+ 	try
+ 	{
+-		std::tm t = boost::posix_time::to_tm(boost::posix_time::from_time_t(timestamp));
++		/* sgnano_povray: Boost.DateTime を外し、C の gmtime を使う */
++		std::tm t;
++		gmtime_r(&timestamp, &t);
+ 		// TODO FIXME - we should either have this locale setting globally, or avoid it completely; in either case it shouldn't be *here*.
+ 		setlocale(LC_TIME,""); // Get the local prefered format
+ 		vlen = strftime(val, PARSE_NOW_VAL_LENGTH, FormatStr, &t);

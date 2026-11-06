@@ -1,0 +1,28 @@
+name: host-build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libpng-dev libjpeg-dev zlib1g-dev
+
+      - name: Configure
+        run: cmake -S . -B build_host -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: ninja -C build_host
+
+      - name: Render a smoke-test scene
+        run: |
+          python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \
+            --width 80 --height 60
+          test -s build_host/test.ppm

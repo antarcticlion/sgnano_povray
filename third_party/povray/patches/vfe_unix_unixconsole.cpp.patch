@@ -1,0 +1,49 @@
+--- a/vfe/unix/unixconsole.cpp
++++ b/vfe/unix/unixconsole.cpp
+@@ -35,8 +35,13 @@
+ #include <sys/select.h>
+ #include <termios.h>
+ #include <unistd.h>
++#include <stdlib.h>
++#include <stdio.h>
+ #include <boost/shared_ptr.hpp>
+ 
++/* sgnano_povray: チェックポイント付きの表示 */
++#include "app/host/sgnano_display.h"
++
+ #include "vfe.h"
+ #include "backend/control/benchmark.h"
+ #include "povray.h"
+@@ -136,6 +141,10 @@
+ 
+ vfeDisplay *UnixDisplayCreator (unsigned int width, unsigned int height, GammaCurvePtr gamma, vfeSession *session, bool visible)
+ {
++	// sgnano_povray: チェックポイント付きのホスト表示。
++	if (getenv("SGNANO_CHECKPOINT") != NULL)
++		return new pov_frontend::SgnanoDisplay(width, height, gamma, session, visible);
++
+ 	UnixDisplay *display = GetRenderWindow () ;
+ 	switch (gDisplayMode)
+ 	{
+@@ -472,6 +481,21 @@
+ 			opts.AddLibraryPath (s);
+ 		while (*++argv)
+ 			opts.AddCommand (*argv);
++
++		// sgnano_povray: チェックポイントを使うときは、再開行・1スレッド・AAなし・4x4ブロックを強制する。
++		if (getenv("SGNANO_CHECKPOINT") != NULL)
++		{
++			const char *sr = getenv("SGNANO_START_ROW");
++			if (sr != NULL && atoi(sr) > 0)
++			{
++				char b[32];
++				snprintf(b, sizeof b, "+SR%d", atoi(sr));
++				opts.AddCommand(b);
++			}
++			opts.SetThreadCount(1);
++			opts.AddCommand("-A");
++			opts.AddCommand("+BS4");
++		}
+ 	}
+ 
+ 	// set all options and start rendering

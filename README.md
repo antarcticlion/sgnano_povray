@@ -1,0 +1,83 @@
+# sgnano_povray
+
+POV-Ray 3.7 を sgnano（RP2350 のビデオコンソール）の **SGX アプリ**として動かすための移植プロジェクト。
+
+- 本体ファームとは分離し、AGPL の POV-Ray コードをファームにリンクしない。
+- 画面は **mode 2（テキスト＋640×480 RGB555）**、フレームバッファは1ページを想定。
+- 途中で終了しても **1 ライン単位のチェックポイント**から再開できる。
+- 描画中はテキスト面（ホストでは stderr）に進捗・ETA・チェックポイント状態を出す。
+
+## いまの状態
+
+| 項目 | 状態 |
+|---|---|
+| POV-Ray 3.7.0.10 の取り込み | 完了 |
+| ホスト版のビルド | 完了（`build_host/povray_host`） |
+| 簡単なシーンの描画 | 完了（`tests/scenes/simple.pov`） |
+| チェックポイント／再開 | 実装中（ホストで確認中） |
+| SGX 4.0 ABI の設計 | 案を作成（`SPEC_sgx4_overlay_store.md`） |
+| SGX 側のスタブ | これから |
+
+## クイックスタート（ホスト）
+
+```sh
+cmake -S . -B build_host -G Ninja -DCMAKE_BUILD_TYPE=Release
+ninja -C build_host
+
+python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.ppm \
+  --width 640 --height 480
+```
+
+途中で止めても、同じコマンドで続きから描画します。詳しくは
+[`docs/BUILD.md`](docs/BUILD.md)。
+
+## 設計の要点
+
+RP2350 の Cortex-M33 には MMU がないため、一般的な透過ページングは作れない。
+そこで SGX 4.0 では次の形にする。
+
+- **プログラム**: 常駐コア＋固定スロットのオーバーレイ。
+- **ヒープ**: ハンドル付きブロックストア（メッシュ、テクスチャ、シーン DB）。
+- **画面**: POV-Ray の画像バッファ（20B/画素）を持たず、RGB555 で FB へ直接書く。
+
+詳細は [`SPEC_sgx4_overlay_store.md`](SPEC_sgx4_overlay_store.md) と
+[`include/sgx4_api.h`](include/sgx4_api.h)。
+
+## リポジトリ構成
+
+```
+app/                     sgnano アプリ共通層（チェックポイント、状態、ホスト FB）
+cmake/                   上流 Makefile.am から生成したソース一覧
+compat/                  Boost.Thread / jversion のホスト互換層
+docs/                    ビルド手順、上流からの変更点
+include/sgx4_api.h       SGX 4.0 ABI の案（MIT）
+platform/host/config.h   ホスト用 config.h
+tests/scenes/            テストシーン
+third_party/povray/      POV-Ray 3.7.0.10（AGPL、ローカルパッチあり）
+third_party/boost/       Boost 1.62.0 ヘッダ（Boost License）
+tools/run_host.py        チェックポイント付き実行ラッパー
+```
+
+## 上流からの変更
+
+POV-Ray 3.7.0.10 に対する変更は
+[`docs/UPSTREAM_CHANGES.md`](docs/UPSTREAM_CHANGES.md) にまとめてある。
+パッチは `third_party/povray/patches/` に置いている。
+
+## ライセンス
+
+- アプリ本体: **AGPL-3.0-or-later**（POV-Ray 3.7 に基づくため）。[`LICENSE`](LICENSE)
+- `include/sgx4_api.h`: **MIT**（sgnano SDK と合わせるための提案ヘッダ）。[`LICENSES/MIT.txt`](LICENSES/MIT.txt)
+- POV-Ray: AGPL-3.0-or-later（[`third_party/povray/COPYING`](third_party/povray/COPYING)）
+- Boost: Boost Software License 1.0（[`third_party/boost/LICENSE_1_0.txt`](third_party/boost/LICENSE_1_0.txt)）
+
+配布時は POV-Ray のソースと本リポジトリの変更点を含めること。詳細は
+[`NOTICE`](NOTICE) を参照。
+
+## ロードマップ
+
+1. ホストでチェックポイント／再開を完成させる。
+2. `SgnanoDisplay` の FB 出力を SGX スタブへ載せ替える。
+3. SGX 4.0 のオーバーレイ／ブロックストアを sgnano 本体の正式 ABI に合わせる。
+4. POV-Ray の常駐コア／モジュール分割、Boost 除去、メッシュのアウトオブコア化。
+5. 実機で mode 2 の描画と再開を確認する。

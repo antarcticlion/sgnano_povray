@@ -1,0 +1,24 @@
+--- a/source/backend/parser/express.cpp
++++ b/source/backend/parser/express.cpp
+@@ -35,7 +35,7 @@
+ #include <cstdlib>
+ 
+ #include <ctype.h>
+-#include <boost/date_time/posix_time/posix_time.hpp>
++#include <time.h>       /* sgnano_povray: time() */
+ 
+ // frame.h must always be the first POV file included (pulls in platform config)
+ #include "backend/frame.h"
+@@ -1082,9 +1082,9 @@
+ 
+ 				case NOW_TOKEN:
+ 					{
+-						static boost::posix_time::ptime y2k(boost::gregorian::date(2000,1,1));
+-						boost::posix_time::ptime now(boost::posix_time::microsec_clock::universal_time());
+-						Val = (now-y2k).total_microseconds() * (1.0e-6) / (24*60*60);
++						/* sgnano_povray: Boost.DateTime を外す。2000-01-01 00:00:00 UTC からの日数 */
++						const double y2k = 946684800.0;     /* 2000-01-01 UTC の Unix 秒 */
++						Val = ((double)time(NULL) - y2k) / (24.0 * 60.0 * 60.0);
+ 					}
+ 					break;
+ 			}

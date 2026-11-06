@@ -1,0 +1,26 @@
+# build directories
+/build*/
+/out/
+/compile_commands.json
+
+# generated binaries and objects
+*.o
+*.a
+*.so
+*.elf
+*.sgx
+*.sgx4
+*.uf2
+
+# generated render output and checkpoints
+*.ckp
+*.povstate
+*.log
+/tests/**/*.ppm
+/tests/**/*.png
+/tests/**/*.tga
+
+# editor / OS
+.DS_Store
+*.swp
+*~

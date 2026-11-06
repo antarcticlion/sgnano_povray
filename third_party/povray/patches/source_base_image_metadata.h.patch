@@ -1,0 +1,71 @@
+--- a/source/base/image/metadata.h
++++ b/source/base/image/metadata.h
+@@ -33,8 +33,8 @@
+ #define POVRAY_BASE_METADATA_H
+ 
+ #include <string>
+-#include <boost/date_time/gregorian/gregorian.hpp>
+-#include <boost/date_time/posix_time/posix_time.hpp>
++#include <cstdio>
++#include <ctime>
+ 
+ #include "backend/povray.h"
+ 
+@@ -47,9 +47,16 @@
+ 	public:
+ 		Metadata()
+ 		{
+-			boost::posix_time::ptime timestamp = boost::posix_time::second_clock::universal_time();
+-			date = timestamp.date();
+-			time = timestamp.time_of_day();
++			/* sgnano_povray: Boost.DateTime を外し、C の gmtime を使う */
++			std::time_t now = std::time(NULL);
++			std::tm t;
++			gmtime_r(&now, &t);
++			year = t.tm_year + 1900;
++			month = t.tm_mon + 1;
++			day = t.tm_mday;
++			hour = t.tm_hour;
++			minute = t.tm_min;
++			second = t.tm_sec;
+ 		}
+ 
+ 		virtual ~Metadata(){}
+@@ -129,24 +136,28 @@
+ 		}
+ 
+ 		/// Get date string in ISO 8601 format.
+-		string getDateTime() const { return to_iso_extended_string(date) + " " + to_simple_string(time) + "Z"; }
++		string getDateTime() const
++		{
++			char b[40];
++			snprintf(b, sizeof b, "%04d-%02d-%02d %02d:%02d:%02dZ", year, month, day, hour, minute, second);
++			return string(b);
++		}
+ 
+ 		/// Get year (including full century)
+-		int getYear() const { return date.year(); }
++		int getYear() const { return year; }
+ 		/// Get month (1..12)
+-		int getMonth() const { return date.month(); }
++		int getMonth() const { return month; }
+ 		/// Get day of month (1..31)
+-		int getDay() const { return date.day(); }
++		int getDay() const { return day; }
+ 		/// Get hour of day (0..23)
+-		int getHour() const { return time.hours(); }
++		int getHour() const { return hour; }
+ 		/// Get minute of hour (0..59)
+-		int getMin() const { return time.minutes(); }
++		int getMin() const { return minute; }
+ 		/// Get second of minute (0..59)
+-		int getSec() const { return time.seconds(); }
++		int getSec() const { return second; }
+ 
+ 	protected:
+-		boost::gregorian::date              date;
+-		boost::posix_time::time_duration    time;
++		int year, month, day, hour, minute, second;
+ };
+ 
+ }

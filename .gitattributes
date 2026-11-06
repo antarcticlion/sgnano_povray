@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+# Vendored code is kept byte-for-byte; do not normalize line endings.
+third_party/** -text
+
+# Keep vendored code out of GitHub language statistics.
+third_party/** linguist-vendored
+
+# Patches are text.
+*.patch text diff

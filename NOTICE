@@ -1,0 +1,37 @@
+# NOTICE
+
+`sgnano_povray` is a port of POV-Ray 3.7 to the sgnano video console.
+
+## Main license
+
+The application code in this repository is distributed under the **GNU Affero
+General Public License, version 3 or later** (AGPL-3.0-or-later), because it is
+built on POV-Ray 3.7. See `LICENSE`.
+
+Exception: `include/sgx4_api.h` is a proposed SGX ABI header intended to be
+compatible with the sgnano SDK. It is licensed under the **MIT License**
+(`LICENSES/MIT.txt`) so that the sgnano project can adopt it.
+
+## Third-party components
+
+- **POV-Ray 3.7.0.10**  
+  Copyright 1991-2013 Persistence of Vision Raytracer Pty. Ltd.  
+  AGPL-3.0-or-later. See `third_party/povray/COPYING`.
+  Local modifications are described in `docs/UPSTREAM_CHANGES.md`.
+
+- **Boost 1.62.0 headers**  
+  Copyright the Boost authors.  
+  Boost Software License 1.0. See `third_party/boost/LICENSE_1_0.txt`.
+  The headers are vendored unchanged.
+
+- **sgnano SGX SDK / ABI reference**  
+  The sgnano project's SGX ABI and SDK are MIT-licensed. This repository
+  contains only a proposed ABI header (`include/sgx4_api.h`) and does not
+  include sgnano firmware code.
+
+## Distribution
+
+When distributing binaries of this port, provide the corresponding source
+code, the AGPL license text, and the notices above. The POV-Ray source is in
+`third_party/povray/` and the local modifications are documented and provided
+as patches in `third_party/povray/patches/`.
