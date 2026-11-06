@@ -9,6 +9,8 @@
 - Added `SgnanoDisplay` to receive POV-Ray render blocks as RGB555.
 - Added `app/sgnano_app.c` for line-by-line checkpointing and resume.
 - Added `tools/run_host.py`.
+- Verified host checkpoint/resume: killed at 32/480 lines, resumed, and the
+  final PPM matched a fresh render byte-for-byte.
 - Added SGX 4.0 overlay + block-store design notes and ABI proposal.
 - Documented all local changes to upstream in `docs/UPSTREAM_CHANGES.md`
   and `third_party/povray/patches/`.

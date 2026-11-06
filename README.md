@@ -14,7 +14,7 @@ POV-Ray 3.7 を sgnano（RP2350 のビデオコンソール）の **SGX アプ�
 | POV-Ray 3.7.0.10 の取り込み | 完了 |
 | ホスト版のビルド | 完了（`build_host/povray_host`） |
 | 簡単なシーンの描画 | 完了（`tests/scenes/simple.pov`） |
-| チェックポイント／再開 | 実装中（ホストで確認中） |
+| チェックポイント／再開 | 完了（ホストで途中終了→再開→完成画像の一致を確認） |
 | SGX 4.0 ABI の設計 | 案を作成（`SPEC_sgx4_overlay_store.md`） |
 | SGX 側のスタブ | これから |
 
@@ -30,6 +30,13 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.ppm \
 
 途中で止めても、同じコマンドで続きから描画します。詳しくは
 [`docs/BUILD.md`](docs/BUILD.md)。
+
+### 確認済みの動作
+
+- 640×480、1 スレッド、AA なし、4×4 ブロックで描画。
+- 0.6 秒で強制終了 → チェックポイント 32/480 ライン。
+- 再実行で 32 行目から再開し、480/480 まで完成。
+- 再開して完成した PPM と、最初から描いた PPM の SHA-256 が一致。
 
 ## 設計の要点
 
