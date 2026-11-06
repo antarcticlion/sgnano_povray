@@ -61,20 +61,23 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \
    cmp build_host/resume.ppm build_host/fresh.ppm
    ```
 
-2026-11-06 の実測では、640×480 で 32/480 ラインから再開し、
-`resume.ppm` と `fresh.ppm` の SHA-256 が一致した。
+2026-11-06 の実測では、640×480 で 97/480 ラインから再開し、
+`resume.ppm` と `fresh.ppm` がバイト単位で一致した。ヘッダ 2 部＋CRC32 の
+v2 形式でも同じ結果を確認している。
 
 ## チェックポイントの形式
 
-- ヘッダ 256 バイト。
+- ヘッダ 2 部（各 256 バイト、合計 512 バイト）。世代番号の大きい方を採用する。
   - magic `SGNPCKP1`
-  - version, width, height, line_bytes, block_size
+  - version, generation, width, height, line_bytes, block_size
   - scene_hash, options_hash
   - lines_done, first_missing, updated_ms
   - 完了ラインのビットマップ（480 ライン = 60 バイト）
+  - CRC32
 - その後ろに `height * width * 2` バイトの RGB555 ライン。
-- ラインが揃うたびに、そのラインとヘッダを書き、`fflush`＋`fsync` する
-  （SGX では `store_flush` が同じ役目）。
+- ラインが揃うたびに、そのラインとヘッダの片方（世代で交互）を書き、
+  `fflush`＋`fsync` する（SGX では `store_flush` が同じ役目）。
+  ヘッダ更新中に電源が切れても、もう片方の古いヘッダから再開できる。
 - 完成時にヘッダを閉じてファイルを削除する。
 
 ## 注意

@@ -17,8 +17,10 @@ extern "C" {
 #endif
 
 #define SGNANO_CKP_MAGIC        "SGNPCKP1"
-#define SGNANO_CKP_VERSION      1u
-#define SGNANO_CKP_HEADER_BYTES 256u
+#define SGNANO_CKP_VERSION      2u
+#define SGNANO_CKP_COPY_BYTES   256u
+#define SGNANO_CKP_HEADER_BYTES 512u   // ヘッダ 2 部（世代交代で壊れた方を使わない）
+#define SGNANO_CKP_LINE_OFFSET  512u
 #define SGNANO_CKP_MAX_LINES    480u
 #define SGNANO_CKP_MAX_WIDTH    1024u
 

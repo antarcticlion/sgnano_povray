@@ -14,6 +14,7 @@
 typedef struct {
     char     magic[8];
     uint32_t version;
+    uint32_t generation;
     uint32_t width, height;
     uint32_t line_bytes;
     uint32_t block_size;
@@ -23,10 +24,11 @@ typedef struct {
     uint32_t first_missing;
     uint32_t updated_ms;
     uint8_t  bitmap[CKP_BITMAP_BYTES];
-    uint8_t  reserved[SGNANO_CKP_HEADER_BYTES - 8u - 10u * 4u - CKP_BITMAP_BYTES];
+    uint32_t crc;
+    uint8_t  reserved[SGNANO_CKP_COPY_BYTES - 8u - 11u * 4u - CKP_BITMAP_BYTES - 4u];
 } ckp_header_t;
 
-_Static_assert(sizeof(ckp_header_t) == SGNANO_CKP_HEADER_BYTES, "checkpoint header size");
+_Static_assert(sizeof(ckp_header_t) == SGNANO_CKP_COPY_BYTES, "checkpoint header size");
 
 typedef struct {
     sgnano_app_config_t   cfg;
@@ -56,6 +58,17 @@ static uint64_t now_ms(void) { return A.plat.now_ms ? (uint64_t)A.plat.now_ms() 
 static bool bit_get(const uint8_t *bm, uint32_t i) { return (bm[i >> 3] & (uint8_t)(1u << (i & 7u))) != 0; }
 static void bit_set(uint8_t *bm, uint32_t i)      { bm[i >> 3] |= (uint8_t)(1u << (i & 7u)); }
 static void bit_clr(uint8_t *bm, uint32_t i)      { bm[i >> 3] &= (uint8_t)~(1u << (i & 7u)); }
+
+static uint32_t crc32_bytes(const void *data, size_t n)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    uint32_t c = 0xFFFFFFFFu;
+    while (n--) {
+        c ^= *p++;
+        for (unsigned k = 0; k < 8u; k++) c = (c >> 1) ^ (0xEDB88320u & (uint32_t)(-(int32_t)(c & 1u)));
+    }
+    return ~c;
+}
 
 static const char *base_name(const char *p)
 {
@@ -101,11 +114,36 @@ static void maybe_status(bool force)
     if (A.plat.status) A.plat.status(sgnano_app_status_text());
 }
 
-static bool write_header(void)
+static bool header_valid(const ckp_header_t *h)
 {
+    if (memcmp(h->magic, SGNANO_CKP_MAGIC, 8) != 0) return false;
+    if (h->version != SGNANO_CKP_VERSION) return false;
+    if (h->width != A.cfg.width || h->height != A.cfg.height) return false;
+    if (h->line_bytes != A.cfg.width * 2u || h->block_size != A.cfg.block_size) return false;
+    if (h->scene_hash != A.cfg.scene_hash || h->options_hash != A.cfg.options_hash) return false;
+    if (h->lines_done > A.cfg.height || h->first_missing > A.cfg.height) return false;
+    ckp_header_t t = *h;
+    const uint32_t want = t.crc;
+    t.crc = 0;
+    return crc32_bytes(&t, sizeof t) == want;
+}
+
+static bool write_header_copy(uint32_t copy)
+{
+    A.hdr.crc = 0;
+    A.hdr.crc = crc32_bytes(&A.hdr, sizeof A.hdr);
+    const uint32_t off = copy * SGNANO_CKP_COPY_BYTES;
+    if (!A.plat.write_at(A.fh, off, &A.hdr, sizeof A.hdr)) { A.ckp_error = true; return false; }
+    return A.plat.flush(A.fh);
+}
+
+// 世代を進めて、2 部あるヘッダの片方だけを更新する。
+// 更新中に電源が切れても、もう片方の古いヘッダから再開できる。
+static bool commit_header(void)
+{
+    A.hdr.generation++;
     A.hdr.updated_ms = now_ms();
-    if (!A.plat.write_at(A.fh, 0, &A.hdr, sizeof A.hdr)) { A.ckp_error = true; return false; }
-    return true;
+    return write_header_copy(A.hdr.generation & 1u);
 }
 
 // 全ラインが揃ったら、画像を保存してチェックポイントを消す。
@@ -130,13 +168,13 @@ static void checkpoint_line(uint32_t y)
     if (bit_get(A.hdr.bitmap, y)) return;
     if (!A.plat.fb_get) { A.ckp_error = true; return; }
     A.plat.fb_get(0, y, A.linebuf, A.cfg.width);
-    const uint32_t off = SGNANO_CKP_HEADER_BYTES + y * A.hdr.line_bytes;
+    const uint32_t off = SGNANO_CKP_LINE_OFFSET + y * A.hdr.line_bytes;
     if (!A.plat.write_at(A.fh, off, A.linebuf, A.hdr.line_bytes)) { A.ckp_error = true; return; }
     bit_set(A.hdr.bitmap, y);
     A.hdr.lines_done++;
     while (A.hdr.first_missing < A.cfg.height && bit_get(A.hdr.bitmap, A.hdr.first_missing))
         A.hdr.first_missing++;
-    if (!write_header() || !A.plat.flush(A.fh)) A.ckp_error = true;
+    if (!commit_header()) A.ckp_error = true;
     A.last_line_ms = now_ms();
     A.last_line_no = y;
     maybe_status(A.hdr.first_missing >= A.cfg.height);
@@ -172,7 +210,7 @@ bool sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t
     A.cfg.block_size = cfg->block_size;
     A.cells_per_line = (cfg->width + cfg->block_size - 1u) / cfg->block_size;
     A.cov_bytes = (A.cells_per_line + 7u) / 8u;
-    A.file_size = SGNANO_CKP_HEADER_BYTES + cfg->height * cfg->width * 2u;
+    A.file_size = SGNANO_CKP_LINE_OFFSET + cfg->height * cfg->width * 2u;
     A.coverage = (uint8_t *)calloc((size_t)cfg->height * A.cov_bytes, 1);
     A.linebuf = (uint16_t *)malloc((size_t)cfg->width * 2u);
     if (!A.coverage || !A.linebuf) goto fail;
@@ -182,17 +220,14 @@ bool sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t
 
     bool valid = false;
     if (cfg->resume) {
-        ckp_header_t h;
-        if (A.plat.read_at(A.fh, 0, &h, sizeof h) &&
-            memcmp(h.magic, SGNANO_CKP_MAGIC, 8) == 0 &&
-            h.version == SGNANO_CKP_VERSION &&
-            h.width == cfg->width && h.height == cfg->height &&
-            h.line_bytes == cfg->width * 2u &&
-            h.block_size == cfg->block_size &&
-            h.scene_hash == cfg->scene_hash &&
-            h.options_hash == cfg->options_hash &&
-            h.lines_done <= cfg->height && h.first_missing <= cfg->height) {
-            A.hdr = h;
+        ckp_header_t h0, h1;
+        const bool v0 = A.plat.read_at(A.fh, 0, &h0, sizeof h0) && header_valid(&h0);
+        const bool v1 = A.plat.read_at(A.fh, SGNANO_CKP_COPY_BYTES, &h1, sizeof h1) && header_valid(&h1);
+        if (v0 || v1) {
+            if (v0 && v1)
+                A.hdr = (h0.generation >= h1.generation) ? h0 : h1;
+            else
+                A.hdr = v0 ? h0 : h1;
             valid = true;
         }
     }
@@ -201,6 +236,7 @@ bool sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t
         memset(&A.hdr, 0, sizeof A.hdr);
         memcpy(A.hdr.magic, SGNANO_CKP_MAGIC, 8);
         A.hdr.version = SGNANO_CKP_VERSION;
+        A.hdr.generation = 1;
         A.hdr.width = cfg->width;
         A.hdr.height = cfg->height;
         A.hdr.line_bytes = cfg->width * 2u;
@@ -209,7 +245,7 @@ bool sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t
         A.hdr.options_hash = cfg->options_hash;
         A.hdr.lines_done = 0;
         A.hdr.first_missing = 0;
-        if (!write_header()) goto fail;
+        if (!write_header_copy(0) || !write_header_copy(1)) goto fail;
         const uint8_t z = 0;
         if (!A.plat.write_at(A.fh, A.file_size - 1u, &z, 1) || !A.plat.flush(A.fh)) goto fail;
     } else {
@@ -221,7 +257,7 @@ bool sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t
                 continue;
             }
             cnt++;
-            const uint32_t off = SGNANO_CKP_HEADER_BYTES + y * A.hdr.line_bytes;
+            const uint32_t off = SGNANO_CKP_LINE_OFFSET + y * A.hdr.line_bytes;
             if (!A.plat.read_at(A.fh, off, A.linebuf, A.hdr.line_bytes)) { A.ckp_error = true; continue; }
             A.plat.fb_put(0, y, A.linebuf, cfg->width);
             memset(A.coverage + (size_t)y * A.cov_bytes, 0xFF, A.cov_bytes);

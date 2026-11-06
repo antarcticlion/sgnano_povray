@@ -15,10 +15,13 @@ import struct
 import subprocess
 import sys
 import tempfile
+import zlib
 
-HEADER_BYTES = 256
+COPY_BYTES = 256
+HEADER_BYTES = 512
+LINE_OFFSET = 512
 MAGIC = b"SGNPCKP1"
-CKP_VERSION = 1
+CKP_VERSION = 2
 MAX_LINES = 480
 MAX_WIDTH = 1024
 
@@ -40,23 +43,40 @@ def options_hash(width: int, height: int, block: int) -> int:
     return fnv1a(f"povray37:W{width}:H{height}:BS{block}:A0".encode())
 
 
+def parse_header_copy(b: bytes):
+    if len(b) < COPY_BYTES or b[:8] != MAGIC:
+        return None
+    (magic, version, generation, width, height, line_bytes, block_size,
+     shash, ohash, lines_done, first_missing, updated_ms) = \
+        struct.unpack_from("<8s11I", b, 0)
+    bitmap = b[52:52 + (MAX_LINES + 7) // 8]
+    stored_crc, = struct.unpack_from("<I", b, 112)
+    tmp = bytearray(b[:COPY_BYTES])
+    tmp[112:116] = b"\0\0\0\0"
+    if (zlib.crc32(tmp) & 0xFFFFFFFF) != stored_crc:
+        return None
+    return {
+        "version": version, "generation": generation,
+        "width": width, "height": height, "line_bytes": line_bytes,
+        "block_size": block_size, "scene_hash": shash, "options_hash": ohash,
+        "lines_done": lines_done, "first_missing": first_missing, "updated_ms": updated_ms,
+        "bitmap": bitmap,
+    }
+
+
 def read_header(path: str):
     try:
         with open(path, "rb") as f:
             b = f.read(HEADER_BYTES)
     except OSError:
         return None
-    if len(b) < HEADER_BYTES or b[:8] != MAGIC:
+    if len(b) < HEADER_BYTES:
         return None
-    magic, version, width, height, line_bytes, block_size, shash, ohash, lines_done, first_missing, updated_ms = \
-        struct.unpack_from("<8s10I", b, 0)
-    bitmap = b[48:48 + (MAX_LINES + 7) // 8]
-    return {
-        "version": version, "width": width, "height": height, "line_bytes": line_bytes,
-        "block_size": block_size, "scene_hash": shash, "options_hash": ohash,
-        "lines_done": lines_done, "first_missing": first_missing, "updated_ms": updated_ms,
-        "bitmap": bitmap,
-    }
+    h0 = parse_header_copy(b[0:COPY_BYTES])
+    h1 = parse_header_copy(b[COPY_BYTES:2 * COPY_BYTES])
+    if h0 and h1:
+        return h0 if h0["generation"] >= h1["generation"] else h1
+    return h0 or h1
 
 
 def checkpoint_to_ppm(ckp: str, header: dict, out: str) -> bool:
@@ -67,7 +87,7 @@ def checkpoint_to_ppm(ckp: str, header: dict, out: str) -> bool:
         for y in range(h):
             if not (bitmap[y >> 3] & (1 << (y & 7))):
                 return False
-            f.seek(HEADER_BYTES + y * lb)
+            f.seek(LINE_OFFSET + y * lb)
             line = f.read(lb)
             if len(line) != lb:
                 return False

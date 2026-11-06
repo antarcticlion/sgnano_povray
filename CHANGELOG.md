@@ -11,6 +11,10 @@
 - Added `tools/run_host.py`.
 - Verified host checkpoint/resume: killed at 32/480 lines, resumed, and the
   final PPM matched a fresh render byte-for-byte.
+- Checkpoint format v2: two 256-byte header copies with generation numbers and
+  CRC32, so a torn header write falls back to the previous generation.
+- Checkpoint flushes each completed line with `fflush` + `fsync` (SGX:
+  `store_flush`).
 - Added SGX 4.0 overlay + block-store design notes and ABI proposal.
 - Added an SGX stub platform (`platform/sgx/sgx4_stub.h`,
   `app/sgx/sgnano_app_sgx.c`) using the proposed block-store API.
