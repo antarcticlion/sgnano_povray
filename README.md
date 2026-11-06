@@ -79,7 +79,7 @@ POV-Ray 3.7.0.10 に対する変更は
 - Boost: Boost Software License 1.0（[`third_party/boost/LICENSE_1_0.txt`](third_party/boost/LICENSE_1_0.txt)）
 
 配布時は POV-Ray のソースと本リポジトリの変更点を含めること。詳細は
-[`NOTICE`](NOTICE) を参照。
+[`NOTICE`](NOTICE) を参照。開発の決まりは [`CONTRIBUTING.md`](CONTRIBUTING.md)。
 
 ## ロードマップ
 
