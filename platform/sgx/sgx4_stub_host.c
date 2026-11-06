@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "platform/sgx/sgx4_stub.h"
 
@@ -123,7 +124,8 @@ static int h_store_release(void *vp, int dirty)
 static int h_store_flush(int id)
 {
     if (id < 0 || id >= MAX_STORES || !g_stores[id].f) return -1;
-    return fflush(g_stores[id].f) == 0 ? 0 : -1;
+    if (fflush(g_stores[id].f) != 0) return -1;
+    return fsync(fileno(g_stores[id].f)) == 0 ? 0 : -1;
 }
 
 static int h_store_close(int id)

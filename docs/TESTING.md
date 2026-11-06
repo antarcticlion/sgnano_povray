@@ -73,7 +73,8 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \
   - lines_done, first_missing, updated_ms
   - 完了ラインのビットマップ（480 ライン = 60 バイト）
 - その後ろに `height * width * 2` バイトの RGB555 ライン。
-- ラインが揃うたびに、そのラインとヘッダを書き、flush する。
+- ラインが揃うたびに、そのラインとヘッダを書き、`fflush`＋`fsync` する
+  （SGX では `store_flush` が同じ役目）。
 - 完成時にヘッダを閉じてファイルを削除する。
 
 ## 注意

@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 static uint16_t *g_fb;
 static uint32_t g_w, g_h;
@@ -49,7 +50,8 @@ static bool h_write_at(void *h, uint32_t off, const void *src, uint32_t n)
 static bool h_flush(void *h)
 {
     FILE *f = (FILE *)h;
-    return f && fflush(f) == 0;
+    if (!f || fflush(f) != 0) return false;
+    return fsync(fileno(f)) == 0;   // 1 ラインごとにストレージへ落とす
 }
 
 static void h_close(void *h) { if (h) fclose((FILE *)h); }
