@@ -4,6 +4,14 @@
 
 この文書は「POV-Ray 3.7 を sgnano の SGX アプリとして動かすために、プログラム領域とヒープをストレージへ逃がす」ための ABI と SDK の改修案です。実装前の設計案であり、数値は目標値です。
 
+> **【2026-11-06 追記】正式 ABI 4.0 が sgnano 本体から届きました。**
+> 正式版はこの文書の案のうち **ブロックストア（`store_*`）だけ**を採用し、
+> `.sgx`（`SGX1`）の入れ物・`.SGX4`・オーバーレイは入れていません。
+> `store_pin` / `store_unpin` は `store_get` / `store_release` に統合され、
+> `SGX_STORE_RAW` / `SGX_STORE_COMPRESS` は予約（`-SGX_ENOTSUP`）です。
+> 正式な型は [`third_party/sgnano/sgx_api.h`](third_party/sgnano/sgx_api.h)。
+> この文書は設計の経緯として残します。実装は正式 ABI に合わせています。
+
 ---
 
 ## 0. 結論

@@ -45,34 +45,44 @@ static void h_log(const char *s, unsigned n) { fwrite(s, 1, n, stderr); }
 
 static void h_term_write(const char *s, unsigned n) { fwrite(s, 1, n, stdout); }
 
-static int h_set_mode(int mode) { (void)mode; return 0; }
+static const char *h_set_mode(int mode) { (void)mode; return NULL; }
 
 static uint16_t h_rgb(unsigned r, unsigned g, unsigned b)
 {
     return (uint16_t)(((r >> 3) & 31u) | (((g >> 3) & 31u) << 5) | (((b >> 3) & 31u) << 10));
 }
 
-static uint16_t *h_fb_page(int page) { return page == 0 ? g_fb : NULL; }
+static void *h_fb_page(int page) { return page == 0 ? g_fb : NULL; }
 
-static int h_text_puts(int x, int y, const char *s, uint32_t attr)
+static unsigned h_text_puts(unsigned x, unsigned y, const char *s, uint32_t attr)
 {
     (void)attr;
-    fprintf(stdout, "[text %d,%d] %s\n", x, y, s);
+    fprintf(stdout, "[text %u,%u] %s\n", x, y, s);
     return 0;
 }
 
-static int h_text_clear(void) { return 0; }
+static void h_text_clear(uint32_t attr) { (void)attr; }
 
 static int h_remove(const char *path) { return remove(path); }
 
-static int h_store_open(const sgx4_store_config_t *cfg)
+static int h_write_file(const char *path, const void *data, uint32_t len)
+{
+    if (!path || !data) return -1;
+    FILE *f = fopen(path, "wb");
+    if (!f) return -1;
+    const bool ok = fwrite(data, 1, len, f) == len && fflush(f) == 0;
+    fclose(f);
+    return ok ? 0 : -1;
+}
+
+static int h_store_open(const sgx_store_config_t *cfg)
 {
     if (!cfg || !cfg->path || !cfg->block_size || !cfg->block_count) return -1;
     int id = -1;
     for (int i = 0; i < MAX_STORES; i++) if (!g_stores[i].f) { id = i; break; }
     if (id < 0) return -1;
     FILE *f = fopen(cfg->path, "r+b");
-    if (!f && (cfg->flags & SGX4_STORE_CREATE)) {
+    if (!f && (cfg->flags & SGX_STORE_CREATE)) {
         f = fopen(cfg->path, "w+b");
         if (f) {
             const uint32_t size = cfg->block_size * cfg->block_count;
@@ -138,6 +148,31 @@ static int h_store_close(int id)
     return 0;
 }
 
+static int h_store_prefetch(int id, uint32_t block, uint32_t count)
+{
+    if (id < 0 || id >= MAX_STORES || !g_stores[id].f) return -1;
+    uint32_t n = 0;
+    for (uint32_t i = 0; i < count && block + i < g_stores[id].blocks; i++) {
+        void *p = h_store_get(id, block + i);
+        if (!p) break;
+        (void)h_store_release(p, 0);
+        n++;
+    }
+    return (int)n;
+}
+
+static int h_store_stats(int id, sgx_store_stats_t *out)
+{
+    if (id < 0 || id >= MAX_STORES || !g_stores[id].f || !out) return -1;
+    memset(out, 0, sizeof *out);
+    out->block_size = g_stores[id].block_size;
+    out->block_count = g_stores[id].blocks;
+    out->cache_blocks = 0;
+    return 0;
+}
+
+static int h_store_error(int id) { (void)id; return 0; }
+
 static const sgx4_stub_api_t g_api = {
     .abi_major = 4,
     .abi_minor = 0,
@@ -152,10 +187,14 @@ static const sgx4_stub_api_t g_api = {
     .text_puts = h_text_puts,
     .text_clear = h_text_clear,
     .remove = h_remove,
+    .write_file = h_write_file,
     .store_open = h_store_open,
     .store_get = h_store_get,
     .store_release = h_store_release,
+    .store_prefetch = h_store_prefetch,
     .store_flush = h_store_flush,
+    .store_stats = h_store_stats,
+    .store_error = h_store_error,
     .store_close = h_store_close,
 };
 

@@ -87,23 +87,14 @@ static void h_status(const char *text)
     fflush(stderr);
 }
 
-static void h_save_image(const char *path)
+static bool h_save_bytes(const char *path, const void *data, uint32_t len)
 {
-    if (!path || !g_fb) return;
+    if (!path || !data) return false;
     FILE *f = fopen(path, "wb");
-    if (!f) return;
-    fprintf(f, "P6\n%u %u\n255\n", (unsigned)g_w, (unsigned)g_h);
-    for (uint32_t y = 0; y < g_h; y++) {
-        for (uint32_t x = 0; x < g_w; x++) {
-            const uint16_t v = g_fb[(size_t)y * g_w + x];
-            const uint8_t r = (uint8_t)((v & 31u) << 3);
-            const uint8_t g = (uint8_t)(((v >> 5) & 31u) << 3);
-            const uint8_t b = (uint8_t)(((v >> 10) & 31u) << 3);
-            fputc(r, f); fputc(g, f); fputc(b, f);
-        }
-    }
+    if (!f) return false;
+    const bool ok = fwrite(data, 1, len, f) == len && fflush(f) == 0;
     fclose(f);
-    fprintf(stderr, "[sgnano] wrote %s (%ux%u)\n", path, (unsigned)g_w, (unsigned)g_h);
+    return ok;
 }
 
 static const sgnano_app_platform_t g_platform = {
@@ -117,7 +108,7 @@ static const sgnano_app_platform_t g_platform = {
     .fb_get = h_fb_get,
     .now_ms = h_now_ms,
     .status = h_status,
-    .save_image = h_save_image,
+    .save_bytes = h_save_bytes,
 };
 
 bool sgnano_host_init(uint32_t width, uint32_t height)

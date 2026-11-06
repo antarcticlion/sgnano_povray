@@ -1,13 +1,13 @@
-// sgnano 本体の正式 ABI が出るまでの SGX スタブ。
-// 正式 ABI 4.0 が来たら、このヘッダの関数を sgx_api_t の該当する口へ差し替える。
+// sgnano 本体の ABI 4.0（2026-11-06）のうち、このアプリが使う口だけを持つスタブ。
+// 正式な型は third_party/sgnano/sgx_api.h。ファームの sgx_api_t と同じ並び・同じ型にそろえる。
 #ifndef SGNANO_SGX4_STUB_H
 #define SGNANO_SGX4_STUB_H
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "include/sgx4_api.h"
+#include "sgx_api.h"
 
-#define SGX4_STUB_MODE_TEXT_FB 2
+#define SGX4_STUB_MODE_TEXT_FB SGX_MODE_TEXT_FB
 
 // テキスト面の属性（src/video/text.h と同じ値。正式 ABI では SGX_T_*）
 #define SGX4_T_FG(c)    ((uint32_t)(c) & 15u)
@@ -23,20 +23,24 @@ typedef struct {
     void     (*log)(const char *s, unsigned n);
 
     void     (*term_write)(const char *s, unsigned n);
-    int      (*set_mode)(int mode);
+    const char *(*set_mode)(int mode);
     uint16_t (*rgb)(unsigned r, unsigned g, unsigned b);
-    uint16_t *(*fb_page)(int page);
-    int      (*text_puts)(int x, int y, const char *s, uint32_t attr);
-    int      (*text_clear)(void);
+    void    *(*fb_page)(int page);
+    void     (*text_clear)(uint32_t attr);
+    unsigned (*text_puts)(unsigned col, unsigned row, const char *utf8, uint32_t attr);
 
     int      (*remove)(const char *path);
+    int      (*write_file)(const char *path, const void *src, uint32_t len);
 
-    // SGX 4.0 のブロックストア（案）。正式 ABI が来るまでこの形で使う。
-    int      (*store_open)(const sgx4_store_config_t *cfg);
+    // ABI 4.0 のブロックストア。正式な sgx_api_t と同じ型。
+    int      (*store_open)(const sgx_store_config_t *cfg);
+    int      (*store_close)(int id);
     void    *(*store_get)(int id, uint32_t block);
     int      (*store_release)(void *p, int dirty);
+    int      (*store_prefetch)(int id, uint32_t block, uint32_t count);
     int      (*store_flush)(int id);
-    int      (*store_close)(int id);
+    int      (*store_stats)(int id, sgx_store_stats_t *out);
+    int      (*store_error)(int id);
 } sgx4_stub_api_t;
 
 extern const sgx4_stub_api_t *sgx4;

@@ -27,7 +27,9 @@ static int render_lines(uint32_t y0, uint32_t y1)
 int main(void)
 {
     const char *ckp = "build_host/sgx_test.ckp";
+    const char *png = "build_host/sgx_test.png";
     unlink(ckp);
+    unlink(png);
 
     if (!sgnano_sgx_host_init(W, H) || !sgnano_sgx_init(W, H)) {
         fprintf(stderr, "sgx host init failed\n");
@@ -58,6 +60,8 @@ int main(void)
     }
 
     // 再開。FB は作り直してもよい（チェックポイントから戻す）。
+    cfg.image_path = png;
+    cfg.outputs = SGNANO_OUTPUT_PNG;
     if (!sgnano_sgx_host_init(W, H) || !sgnano_sgx_init(W, H)) {
         fprintf(stderr, "sgx host re-init failed\n");
         return 1;
@@ -79,6 +83,17 @@ int main(void)
     if (access(ckp, F_OK) == 0) {
         fprintf(stderr, "checkpoint was not removed\n");
         return 1;
+    }
+    {
+        FILE *f = fopen(png, "rb");
+        unsigned char sig[8];
+        if (!f || fread(sig, 1, 8, f) != 8 ||
+            sig[0] != 0x89 || sig[1] != 'P' || sig[2] != 'N' || sig[3] != 'G') {
+            fprintf(stderr, "PNG was not written\n");
+            if (f) fclose(f);
+            return 1;
+        }
+        fclose(f);
     }
 
     // 先頭と末尾の画素が残っていること。

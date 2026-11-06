@@ -43,6 +43,15 @@ void SgnanoDisplay::Initialise()
     cfg.block_size = env_u32("SGNANO_BLOCK_SIZE", 4);
     cfg.scene_hash = env_u32("SGNANO_SCENE_HASH", 0);
     cfg.options_hash = env_u32("SGNANO_OPTIONS_HASH", 0);
+    const char *out = getenv("SGNANO_OUTPUT");
+    if (!out || !*out) {
+        cfg.outputs = SGNANO_OUTPUT_PNG;          // 既定は PNG ファイル
+    } else {
+        cfg.outputs = 0;
+        if (strcmp(out, "fb") == 0 || strcmp(out, "both") == 0) cfg.outputs |= SGNANO_OUTPUT_FB;
+        if (strcmp(out, "png") == 0 || strcmp(out, "both") == 0) cfg.outputs |= SGNANO_OUTPUT_PNG;
+        if (!cfg.outputs) cfg.outputs = SGNANO_OUTPUT_FB;
+    }
     cfg.resume = env_u32("SGNANO_RESUME", 1) != 0;
     cfg.verbose = env_u32("SGNANO_VERBOSE", 1) != 0;
 

@@ -18,6 +18,12 @@
 - Added 12 test scenes (vivid architectural, automotive, landscape, night city,
   underwater, space, still life, crystal, forest) plus a deliberately fast
   smoke-test scene and a 10,000-sphere slow scene.
+- Received and integrated the official sgnano SGX ABI 4.0 header
+  (`third_party/sgnano/sgx_api.h`). The stub now uses the official
+  `store_*` types, `SGX_EBUSY`, and the official function signatures.
+- Added selectable output: FB only, lossless PNG (miniz deflate level 9), or
+  both. `tools/run_host.py --output fb|png|both`.
+- Added miniz 3.1.2 for portable PNG writing.
 - Added SGX 4.0 overlay + block-store design notes and ABI proposal.
 - Added an SGX stub platform (`platform/sgx/sgx4_stub.h`,
   `app/sgx/sgnano_app_sgx.c`) using the proposed block-store API.

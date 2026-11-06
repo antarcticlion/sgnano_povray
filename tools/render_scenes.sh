@@ -13,7 +13,7 @@ for f in tests/scenes/*.pov; do
     b=$(basename "$f" .pov)
     echo "== $b (${W}x${H})"
     ./build_host/povray_host \
-        +I"$f" +O"$OUT/$b.ppm" +W"$W" +H"$H" +FP -A \
+        +I"$f" +O"$OUT/$b.png" +W"$W" +H"$H" +FN -A \
         +Lthird_party/povray/include
 done
 

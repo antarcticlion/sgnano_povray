@@ -24,6 +24,11 @@ extern "C" {
 #define SGNANO_CKP_MAX_LINES    480u
 #define SGNANO_CKP_MAX_WIDTH    1024u
 
+// 完成した絵の出力先。FB は画面に残す（ファイルは作らない）。
+// PNG は可逆圧縮の PNG ファイルを保存する。
+#define SGNANO_OUTPUT_FB  0x1u
+#define SGNANO_OUTPUT_PNG 0x2u
+
 typedef struct {
     // チェックポイントファイル。offset はファイル先頭から。
     void *(*open)(const char *path, uint32_t size, bool create);
@@ -43,8 +48,8 @@ typedef struct {
     // 状態の表示（ホストは stdout、SGX はテキスト面）。
     void (*status)(const char *text);
 
-    // 完成した絵の保存（ホストの PPM など。NULL 可）。
-    void (*save_image)(const char *path);
+    // 完成した PNG などのバイト列を保存する（NULL 可）。
+    bool (*save_bytes)(const char *path, const void *data, uint32_t len);
 } sgnano_app_platform_t;
 
 typedef struct {
@@ -55,6 +60,7 @@ typedef struct {
     uint32_t block_size;         // POV-Ray の +BS（4 以上）
     uint32_t scene_hash;         // シーンの同一性
     uint32_t options_hash;       // 解像度・AA などの同一性
+    uint32_t outputs;            // SGNANO_OUTPUT_*（0 なら FB）
     bool resume;                 // 既存のチェックポイントを使う
     bool verbose;
 } sgnano_app_config_t;

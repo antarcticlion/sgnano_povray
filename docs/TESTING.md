@@ -6,12 +6,12 @@
 cmake -S . -B build_host -G Ninja -DCMAKE_BUILD_TYPE=Release
 ninja -C build_host
 
-python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \
-  --width 160 --height 120
+python3 tools/run_host.py tests/scenes/simple.pov build_host/test.png \
+  --width 160 --height 120 --output png
 ```
 
-- `build_host/test.ppm` ができる。
-- 完成すると `build_host/test.ppm.ckp` は消える。
+- `build_host/test.png` ができる。
+- 完成すると `build_host/test.png.ckp` は消える。
 
 ## SGX スタブのチェックポイントテスト
 
@@ -25,6 +25,8 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \
 - 160×120 で 10 ライン描いて終了し、チェックポイントが残ることを確認。
 - 再初期化して 10 行目から再開し、120 ラインまで描く。
 - 完成後にチェックポイントが消えること、FB の先頭と末尾の画素を確認。
+- 後半は `--output png` 相当（`SGNANO_OUTPUT_PNG`）で走らせ、
+  `build_host/sgx_test.png` が正しい PNG 署名で書かれることを確認。
 - 状態表示がテキスト面（ホストでは stdout）へ 4 行で出る。
 
 ## テストシーン
@@ -34,8 +36,8 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \
 `tests/scenes/README.md`。
 
 ```sh
-python3 tools/run_host.py tests/scenes/03_car.pov build_host/car.ppm \
-  --width 640 --height 480
+python3 tools/run_host.py tests/scenes/03_car.pov build_host/car.png \
+  --width 640 --height 480 --output png
 ```
 
 ## チェックポイント／再開のテスト
@@ -43,9 +45,9 @@ python3 tools/run_host.py tests/scenes/03_car.pov build_host/car.ppm \
 1. 途中で強制終了する（0.6 秒で kill）:
 
    ```sh
-   rm -f build_host/resume.ppm build_host/resume.ppm.ckp
-   python3 tools/run_host.py tests/scenes/simple.pov build_host/resume.ppm \
-     --width 640 --height 480 --timeout 0.6
+   rm -f build_host/resume.png build_host/resume.png.ckp
+   python3 tools/run_host.py tests/scenes/simple.pov build_host/resume.png \
+     --width 640 --height 480 --timeout 0.6 --output png
    ```
 
    `--timeout` は POV-Ray を kill し、チェックポイントを残す。
@@ -53,27 +55,27 @@ python3 tools/run_host.py tests/scenes/03_car.pov build_host/car.ppm \
 2. 状態を確認:
 
    ```sh
-   python3 tools/run_host.py tests/scenes/simple.pov build_host/resume.ppm \
-     --width 640 --height 480 --status
+   python3 tools/run_host.py tests/scenes/simple.pov build_host/resume.png \
+     --width 640 --height 480 --output png --status
    ```
 
 3. 再開して完成させる:
 
    ```sh
-   python3 tools/run_host.py tests/scenes/simple.pov build_host/resume.ppm \
-     --width 640 --height 480
+   python3 tools/run_host.py tests/scenes/simple.pov build_host/resume.png \
+     --width 640 --height 480 --output png
    ```
 
 4. 最初から描いたものと比べる:
 
    ```sh
-   python3 tools/run_host.py tests/scenes/simple.pov build_host/fresh.ppm \
-     --width 640 --height 480 --fresh
-   cmp build_host/resume.ppm build_host/fresh.ppm
+   python3 tools/run_host.py tests/scenes/simple.pov build_host/fresh.png \
+     --width 640 --height 480 --fresh --output png
+   cmp build_host/resume.png build_host/fresh.png
    ```
 
 2026-11-06 の実測では、640×480 で 97/480 ラインから再開し、
-`resume.ppm` と `fresh.ppm` がバイト単位で一致した。ヘッダ 2 部＋CRC32 の
+`resume.png` と `fresh.png` がバイト単位で一致した。ヘッダ 2 部＋CRC32 の
 v2 形式でも同じ結果を確認している。
 
 ## チェックポイントの形式

@@ -4,6 +4,7 @@
 // 一時ファイル。確定したラインだけを書き、ヘッダのビットマップで覚える。
 // 途中で終了しても、次回は最初の未完成ラインから再開できる。
 #include "app/sgnano_app.h"
+#include "app/sgnano_png.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,6 +49,7 @@ typedef struct {
     bool                  inited;
     bool                  ckp_error;
     bool                  image_saved;
+    bool                  image_error;
     bool                  ckp_removed;
 } app_state_t;
 
@@ -98,11 +100,12 @@ const char *sgnano_app_status_text(void)
              "POV-Ray 3.7  %s\n"
              "line %u/%u (%.1f%%)  first missing %u\n"
              "elapsed %s  ETA %s  %.1f ms/line\n"
-             "checkpoint: %s  %s",
+             "checkpoint: %s  %s  png=%s",
              base_name(A.cfg.scene_path), (unsigned)done, (unsigned)total, pct,
              (unsigned)A.hdr.first_missing, el, eta, msline,
-             A.cfg.checkpoint_path ? A.cfg.checkpoint_path : "(none)",
-             A.ckp_error ? "ERROR" : (done >= total ? "complete" : "ok"));
+             A.cfg.checkpoint_path ? base_name(A.cfg.checkpoint_path) : "(none)",
+             A.ckp_error ? "ERROR" : (done >= total ? "complete" : "ok"),
+             (A.cfg.outputs & SGNANO_OUTPUT_PNG) ? (A.image_error ? "ERROR" : (A.image_saved ? "ok" : "-")) : "off");
     return b;
 }
 
@@ -152,7 +155,35 @@ static void finalize_if_done(void)
 {
     if (!A.inited || A.hdr.lines_done < A.cfg.height) return;
     if (!A.image_saved) {
-        if (A.cfg.image_path && A.plat.save_image) A.plat.save_image(A.cfg.image_path);
+        if ((A.cfg.outputs & SGNANO_OUTPUT_PNG) && A.cfg.image_path && A.plat.save_bytes) {
+            const size_t n = (size_t)A.cfg.width * A.cfg.height * 3u;
+            uint8_t *rgb = (uint8_t *)malloc(n);
+            if (!rgb) A.image_error = true;
+            if (rgb) {
+                for (uint32_t y = 0; y < A.cfg.height; y++) {
+                    A.plat.fb_get(0, y, A.linebuf, A.cfg.width);
+                    uint8_t *d = rgb + (size_t)y * A.cfg.width * 3u;
+                    for (uint32_t x = 0; x < A.cfg.width; x++) {
+                        const uint16_t v = A.linebuf[x];
+                        const uint8_t r5 = (uint8_t)(v & 31u);
+                        const uint8_t g5 = (uint8_t)((v >> 5) & 31u);
+                        const uint8_t b5 = (uint8_t)((v >> 10) & 31u);
+                        *d++ = (uint8_t)((r5 << 3) | (r5 >> 2));
+                        *d++ = (uint8_t)((g5 << 3) | (g5 >> 2));
+                        *d++ = (uint8_t)((b5 << 3) | (b5 >> 2));
+                    }
+                }
+                uint32_t png_len = 0;
+                uint8_t *png = sgnano_png_encode(rgb, A.cfg.width, A.cfg.height, &png_len);
+                if (png) {
+                    if (!A.plat.save_bytes(A.cfg.image_path, png, png_len)) A.image_error = true;
+                    sgnano_png_free(png);
+                } else {
+                    A.image_error = true;
+                }
+                free(rgb);
+            }
+        }
         A.image_saved = true;
     }
     if (!A.ckp_removed) {
@@ -207,6 +238,7 @@ bool sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platform_t
     memset(&A, 0, sizeof A);
     A.cfg = *cfg;
     A.plat = *plat;
+    if (!A.cfg.outputs) A.cfg.outputs = SGNANO_OUTPUT_FB;
     A.cfg.block_size = cfg->block_size;
     A.cells_per_line = (cfg->width + cfg->block_size - 1u) / cfg->block_size;
     A.cov_bytes = (A.cells_per_line + 7u) / 8u;

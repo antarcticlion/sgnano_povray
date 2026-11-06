@@ -30,8 +30,8 @@ python3 tests/scenes/generate_scenes.py
 1 シーンをチェックポイント付きで描く:
 
 ```sh
-python3 tools/run_host.py tests/scenes/01_geo_landscape.pov build_host/geo.ppm \
-  --width 640 --height 480
+python3 tools/run_host.py tests/scenes/01_geo_landscape.pov build_host/geo.png \
+  --width 640 --height 480 --output png
 ```
 
 全部まとめて描く:
@@ -40,7 +40,7 @@ python3 tools/run_host.py tests/scenes/01_geo_landscape.pov build_host/geo.ppm \
 tools/render_scenes.sh 320 240 build_host/scenes
 ```
 
-`render_scenes.sh` は POV-Ray を直接呼ぶ（チェックポイントなし）。
+`render_scenes.sh` は POV-Ray を直接呼ぶ（チェックポイントなし、PNG 出力）。
 `00_fast_sphere` はスモークテスト、`11_slow_spheres` は
 「途中で止めて再開する」試験や性能比較に向く。
 
@@ -57,4 +57,4 @@ tools/render_scenes.sh 320 240 build_host/scenes
   実機（302MHz M33）ではさらに長くなる。チェックポイントの試験に使うときは
   `--timeout` で途中終了させるとよい。
 - POV-Ray の AA は `-A` で切っている。AA を有効にすると時間とメモリが増える。
-- 画像出力は PPM（`+FP`）。PNG/JPEG はホスト版では無効にしている。
+- 画像出力は PNG（`+FN`、可逆圧縮）。アプリ経由では miniz で PNG を書く。

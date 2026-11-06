@@ -2,12 +2,13 @@
 """ホストで POV-Ray をチェックポイント付きで走らせる。
 
 使い方:
-  tools/run_host.py tests/scenes/simple.pov build/simple.ppm [--width 640] [--height 480]
-  tools/run_host.py tests/scenes/simple.pov build/simple.ppm --status
-  tools/run_host.py tests/scenes/simple.pov build/simple.ppm --fresh
+  tools/run_host.py tests/scenes/simple.pov build/simple.png [--width 640] [--height 480]
+  tools/run_host.py tests/scenes/simple.pov build/simple.png --status
+  tools/run_host.py tests/scenes/simple.pov build/simple.png --fresh
 
-チェックポイントは <ppm>.ckp。途中で終了したら、次回は最初の未完成ラインから再開する。
-完成したチェックポイントがあれば、POV-Ray を走らせずに PPM を書き出す。
+--output png（既定）は可逆圧縮 PNG、fb は画面だけ、both は両方。
+チェックポイントは <出力>.ckp。途中で終了したら、次回は最初の未完成ラインから再開する。
+完成したチェックポイントがあれば、POV-Ray を走らせずに PNG を書き出す。
 """
 import argparse
 import os
@@ -79,11 +80,16 @@ def read_header(path: str):
     return h0 or h1
 
 
-def checkpoint_to_ppm(ckp: str, header: dict, out: str) -> bool:
+def png_chunk(kind: bytes, data: bytes) -> bytes:
+    return (struct.pack(">I", len(data)) + kind + data +
+            struct.pack(">I", zlib.crc32(kind + data) & 0xFFFFFFFF))
+
+
+def checkpoint_to_png(ckp: str, header: dict, out: str) -> bool:
     w, h, lb = header["width"], header["height"], header["line_bytes"]
     bitmap = header["bitmap"]
-    with open(ckp, "rb") as f, open(out, "wb") as g:
-        g.write(f"P6\n{w} {h}\n255\n".encode())
+    rows = []
+    with open(ckp, "rb") as f:
         for y in range(h):
             if not (bitmap[y >> 3] & (1 << (y & 7))):
                 return False
@@ -91,13 +97,21 @@ def checkpoint_to_ppm(ckp: str, header: dict, out: str) -> bool:
             line = f.read(lb)
             if len(line) != lb:
                 return False
-            rgb = bytearray(w * 3)
+            rgb = bytearray(w * 3 + 1)  # filter byte 0
             for x in range(w):
                 v = line[2 * x] | (line[2 * x + 1] << 8)
-                rgb[3 * x + 0] = (v & 31) << 3
-                rgb[3 * x + 1] = ((v >> 5) & 31) << 3
-                rgb[3 * x + 2] = ((v >> 10) & 31) << 3
-            g.write(rgb)
+                r5, g5, b5 = v & 31, (v >> 5) & 31, (v >> 10) & 31
+                rgb[1 + 3 * x + 0] = (r5 << 3) | (r5 >> 2)
+                rgb[1 + 3 * x + 1] = (g5 << 3) | (g5 >> 2)
+                rgb[1 + 3 * x + 2] = (b5 << 3) | (b5 >> 2)
+            rows.append(bytes(rgb))
+    raw = b"".join(rows)
+    png = (b"\x89PNG\r\n\x1a\n" +
+           png_chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) +
+           png_chunk(b"IDAT", zlib.compress(raw, 9)) +
+           png_chunk(b"IEND", b""))
+    with open(out, "wb") as f:
+        f.write(png)
     return True
 
 
@@ -110,6 +124,8 @@ def main() -> int:
     ap.add_argument("--block", type=int, default=4)
     ap.add_argument("--include", default="third_party/povray/include")
     ap.add_argument("--exe", default="build_host/povray_host")
+    ap.add_argument("--output", choices=("fb", "png", "both"), default="png",
+                    help="fb = leave on screen, png = save a lossless PNG, both = PNG + FB")
     ap.add_argument("--fresh", action="store_true")
     ap.add_argument("--status", action="store_true")
     ap.add_argument("--no-run", action="store_true")
@@ -118,8 +134,10 @@ def main() -> int:
     args = ap.parse_args()
 
     ckp = args.out + ".ckp"
-    if args.fresh and os.path.exists(ckp):
-        os.unlink(ckp)
+    if args.fresh:
+        for p in (ckp, args.out):
+            if os.path.exists(p):
+                os.unlink(p)
 
     hdr = read_header(ckp)
     shash = scene_hash(args.scene)
@@ -131,7 +149,7 @@ def main() -> int:
 
     if args.status:
         if not valid:
-            if os.path.exists(args.out):
+            if args.output != "fb" and os.path.exists(args.out):
                 print(f"no checkpoint (render probably complete): {args.out}")
                 return 0
             print(f"no valid checkpoint: {ckp}")
@@ -139,8 +157,8 @@ def main() -> int:
         print(f"{ckp}: {hdr['lines_done']}/{hdr['height']} lines, first missing {hdr['first_missing']}")
         return 0
 
-    if valid and hdr["lines_done"] >= hdr["height"]:
-        if checkpoint_to_ppm(ckp, hdr, args.out):
+    if valid and hdr["lines_done"] >= hdr["height"] and args.output != "fb":
+        if checkpoint_to_png(ckp, hdr, args.out):
             print(f"checkpoint complete: wrote {args.out} ({hdr['width']}x{hdr['height']})")
             return 0
         print("checkpoint complete but unreadable", file=sys.stderr)
@@ -151,7 +169,8 @@ def main() -> int:
     env.update({
         "SGNANO_CHECKPOINT": os.path.abspath(ckp),
         "SGNANO_SCENE": os.path.abspath(args.scene),
-        "SGNANO_IMAGE": os.path.abspath(args.out),
+        "SGNANO_IMAGE": os.path.abspath(args.out) if args.output != "fb" else "",
+        "SGNANO_OUTPUT": args.output,
         "SGNANO_BLOCK_SIZE": str(args.block),
         "SGNANO_SCENE_HASH": str(shash),
         "SGNANO_OPTIONS_HASH": str(ohash),

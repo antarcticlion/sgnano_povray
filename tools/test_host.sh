@@ -8,9 +8,9 @@ ninja -C build_host
 
 ./build_host/test_sgx_checkpoint
 
-rm -f build_host/smoke.ppm build_host/smoke.ppm.ckp
-python3 tools/run_host.py tests/scenes/simple.pov build_host/smoke.ppm \
-    --width 160 --height 120
+rm -f build_host/smoke.png build_host/smoke.png.ckp
+python3 tools/run_host.py tests/scenes/simple.pov build_host/smoke.png \
+    --width 160 --height 120 --output png
 
-test -s build_host/smoke.ppm
+test -s build_host/smoke.png
 echo "host tests: ok"

@@ -29,32 +29,44 @@ ninja -C build_host
 ```sh
 ./build_host/povray_host \
   +Itests/scenes/simple.pov \
-  +O/tmp/simple.ppm \
-  +W320 +H240 +FP -A -V \
+  +O/tmp/simple.png \
+  +W320 +H240 +FN -A -V \
   +Lthird_party/povray/include
 ```
 
 ## チェックポイント付きで描く（再開できる）
 
 ```sh
-python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.ppm \
-  --width 640 --height 480
+python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.png \
+  --width 640 --height 480 --output png
 ```
 
-- チェックポイントは `build_host/simple.ppm.ckp`。
+- チェックポイントは `build_host/simple.png.ckp`。
 - 描画中に強制終了しても、次回同じコマンドで続きから描く。
-- 完成すると PPM を書いて `.ckp` を消す。
+- 完成すると **可逆圧縮 PNG** を書いて `.ckp` を消す。
 - 途中の状態を見る:
 
   ```sh
-  python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.ppm --status
+  python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.png --status
   ```
 
 - 最初から描き直す:
 
   ```sh
-  python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.ppm --fresh
+  python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.png --fresh
   ```
+
+## 出力の選択
+
+`run_host.py` の `--output`:
+
+| 値 | 意味 |
+|---|---|
+| `png` | 可逆圧縮 PNG を保存（既定） |
+| `fb` | ファイルを作らず、FB に描くだけ |
+| `both` | PNG を保存し、FB にも残す |
+
+PNG は miniz の deflate（レベル 9）で可逆圧縮する。無圧縮ではない。
 
 ## 仕組み
 

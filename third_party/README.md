@@ -30,6 +30,22 @@ files casually: local changes must be recorded in
 - License: Boost Software License 1.0 (`boost/LICENSE_1_0.txt`)
 - Unmodified.
 
+## sgnano/
+
+- Official SGX ABI 4.0 header snapshot (`sgx_api.h`), copied from the sgnano
+  working tree on 2026-11-06.
+- License: MIT (same as the sgnano SDK).
+- The header is byte-identical; see `sgnano/SHA256SUMS`. Replace it when the
+  firmware ABI changes.
+
+## miniz/
+
+- miniz 3.1.2 (`miniz.c`, `miniz.h`, `miniz_tdef.c`, `miniz_tinfl.c`,
+  `miniz_zip.h`/`miniz_zip.c`, headers, `miniz_export.h` shim).
+- License: MIT (`miniz/LICENSE`).
+- Used for lossless PNG output. Unmodified except the generated
+  `miniz_export.h` shim (same contents as the upstream test script).
+
 ## What is not vendored
 
 - sgnano firmware: separate project (`../sgnano`), MIT.

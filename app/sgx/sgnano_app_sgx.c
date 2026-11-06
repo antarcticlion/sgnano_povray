@@ -28,13 +28,13 @@ static void *s_open(const char *path, uint32_t size, bool create)
     if (!h) return NULL;
     h->block_size = 4096;
     h->blocks = (size + h->block_size - 1u) / h->block_size;
-    sgx4_store_config_t cfg;
+    sgx_store_config_t cfg;
     memset(&cfg, 0, sizeof cfg);
     cfg.path = path;
     cfg.block_size = h->block_size;
     cfg.block_count = h->blocks;
     cfg.cache_blocks = 8;
-    cfg.flags = SGX4_STORE_WRITEBACK | (create ? SGX4_STORE_CREATE : 0u);
+    cfg.flags = SGX_STORE_WRITEBACK | (create ? SGX_STORE_CREATE : 0u);
     h->id = sgx4->store_open(&cfg);
     if (h->id < 0) { free(h); return NULL; }
     return h;
@@ -93,6 +93,11 @@ static void s_close(void *vh)
 
 static bool s_remove(const char *path) { return sgx4 && sgx4->remove && sgx4->remove(path) == 0; }
 
+static bool s_save_bytes(const char *path, const void *data, uint32_t len)
+{
+    return sgx4 && sgx4->write_file && sgx4->write_file(path, data, len) == 0;
+}
+
 static void s_fb_put(uint32_t x, uint32_t y, const uint16_t *pixels, uint32_t n)
 {
     if (!g_fb || y >= g_h || x >= g_w) return;
@@ -113,7 +118,7 @@ static void s_status(const char *text)
 {
     if (!sgx4 || !sgx4->text_puts || !text) return;
     if (!g_text_cleared) {
-        if (sgx4->text_clear) (void)sgx4->text_clear();
+        if (sgx4->text_clear) sgx4->text_clear(SGX4_T_BG_TRANS);
         g_text_cleared = true;
     }
     char line[81];
@@ -125,7 +130,7 @@ static void s_status(const char *text)
         memset(line, ' ', 80);
         memcpy(line, p, n);
         line[80] = 0;
-        (void)sgx4->text_puts(0, (int)row, line, SGX4_T_BG_TRANS | SGX4_T_FG(15));
+        (void)sgx4->text_puts(0, row, line, SGX4_T_BG_TRANS | SGX4_T_FG(15));
         row++;
         p += n;
         if (*p == '\n') p++;
@@ -143,14 +148,14 @@ static const sgnano_app_platform_t g_platform = {
     .fb_get = s_fb_get,
     .now_ms = s_now_ms,
     .status = s_status,
-    .save_image = NULL,
+    .save_bytes = s_save_bytes,
 };
 
 bool sgnano_sgx_init(uint32_t width, uint32_t height)
 {
     if (!sgx4 || !sgx4->fb_page) return false;
-    if (sgx4->set_mode && sgx4->set_mode(SGX4_STUB_MODE_TEXT_FB) != 0) return false;
-    g_fb = sgx4->fb_page(0);
+    if (sgx4->set_mode) { const char *e = sgx4->set_mode(SGX4_STUB_MODE_TEXT_FB); if (e) return false; }
+    g_fb = (uint16_t *)sgx4->fb_page(0);
     if (!g_fb) return false;
     g_w = width;
     g_h = height;
