@@ -1,0 +1,19 @@
+diff --git a/vfe/vfe.cpp b/vfe/vfe.cpp
+index a448cc3..b49292f 100644
+--- a/vfe/vfe.cpp
++++ b/vfe/vfe.cpp
+@@ -600,8 +600,13 @@ VirtualFrontEnd::~VirtualFrontEnd()
+   // we need to explicitly delete it here since otherwise PlatformBase will have been destroyed
+   // before the shared_ptr does its cleanup
+   imageProcessing.reset();
++  // sgnano: デストラクタは noexcept なので、返事の時間切れ（pov_base::Exception）がここから出ると catch に届かず
++  // std::terminate になる（ESC で止めたあと、FB を出したまま走らせたとき。2026-11-07）。切り離しの失敗は捨てる
+   if (backendAddress != POVMSInvalidAddress)
+-    renderFrontend.DisconnectFromBackend(backendAddress);
++  {
++    try { renderFrontend.DisconnectFromBackend(backendAddress); }
++    catch (...) { }
++  }
+   state = kUnknown;
+ }
+ 

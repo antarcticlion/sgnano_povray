@@ -75,6 +75,27 @@ Boost は 1.62.0 のヘッダだけを `third_party/boost/` に置いている�
   - `+BS4` は POV-Ray の最小ブロックサイズ。4×4 ブロックが揃った時点で
     1 ラインの確定を判定する。
 
+### 6. `vfe/vfe.cpp`
+
+パッチ: `vfe_vfe.cpp.patch`（2026-11-07）
+
+- `VirtualFrontEnd::~VirtualFrontEnd` の `DisconnectFromBackend` を `try { } catch (...) { }` で包んだ。
+- 理由: 切り離しは後ろの返事を待つ（POVMS の WaitReply）。返事が時間切れになると `pov_base::Exception` が出るが、
+  デストラクタは暗に noexcept なので catch に届かず `std::terminate` になった（実機で FB を出したまま描いている途中に
+  ESC で止めたとき。全体が約 20 倍遅く、10 秒の上限を越えた）。切り離しの失敗は後片付けの中なので捨ててよい。
+- あわせて SGX では返事を待つ上限 `kDefaultTimeout` を 10 秒から 60 秒に延ばした（`platform/sgx_pov/syspovconfig.h`。
+  `povms.cpp` は `#ifndef` で受けるので上流のコードは変えていない）。
+
+### 7. `source/backend/support/randomsequences.cpp` / `.h`、`source/backend/pattern/warps.cpp`、`source/backend/pattern/pattern.cpp`
+
+パッチ: `source_backend_support_randomsequences.cpp.patch`、`source_backend_support_randomsequences.h.patch`、
+`source_backend_pattern_warps.cpp.patch`、`source_backend_pattern_pattern.cpp.patch`（2026-11-06）
+
+- `POV_RAND_HASHED` を定義したとき（SGX だけ。`platform/sgx_pov/syspovconfig.h`）、`RandomDoubleSequence` と
+  ワープ・模様の乱数の表を作らず、番号から splitmix64 で計算する（`platform/sgx_pov/pov_hashrand.h`）。
+- 理由: 表は 32768 個の double（256KB）で、Trace・MediaFunction・RadiosityFunction ごと・スレッドごとに作られ、
+  PSRAM が足りなかった。定義しなければ上流と同じ。
+
 ## 追加したファイル（上流には無い）
 
 | ファイル | 説明 |

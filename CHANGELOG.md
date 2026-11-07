@@ -2,6 +2,13 @@
 
 ## 2026-11-07 — povray.sgx renders on the hardware (sgnano SGX ABI 4.3)
 
+- Stopping with ESC while the FB is on screen (`-fbview`) no longer ends in `std::terminate` (exit 134).
+  The POVMS reply to `DisconnectFromBackend` in `~VirtualFrontEnd` timed out (10 s; everything is about 20x
+  slower with the FB on screen) and the exception left a destructor. The call is now wrapped in
+  `try`/`catch` (`vfe/vfe.cpp`), and the SGX build waits up to 60 s (`kDefaultTimeout` in
+  `platform/sgx_pov/syspovconfig.h`). Hardware: `-fbview`, ESC after 120 s -> `POVRAY RESULT: stopped`,
+  104 lines saved, `.partial.png` written. The patches for this and for `POV_RAND_HASHED` are now in
+  `third_party/povray/patches/` and `docs/UPSTREAM_CHANGES.md`.
 - New SGX front end `app/sgx/povray_sgx.cpp` (`povray.sgx SCENE.pov [opts] [-fresh] [-fbview] [-nofb]`):
   vfe session, `SgxDisplay` (RGB555), checkpoint/PNG next to the scene, status lines on the text plane.
   - While rendering it shows a 266x200 preview in screen mode 7 (SRAM, 6x7x6 colours) and switches to

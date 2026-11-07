@@ -1,0 +1,27 @@
+diff --git a/source/backend/pattern/pattern.cpp b/source/backend/pattern/pattern.cpp
+index ed0238b..9287e15 100644
+--- a/source/backend/pattern/pattern.cpp
++++ b/source/backend/pattern/pattern.cpp
+@@ -40,6 +40,9 @@
+ 
+ // frame.h must always be the first POV file included (pulls in platform config)
+ #include "backend/frame.h"
++#ifdef POV_RAND_HASHED
++#include "pov_hashrand.h"   // sgnano（2026-11-06）
++#endif
+ #include "backend/pattern/pattern.h"
+ #include "backend/texture/texture.h"
+ #include "backend/texture/pigment.h"
+@@ -77,7 +80,12 @@ const int FRACTAL_MAX_EXPONENT = 33;
+ * Local variables
+ ******************************************************************************/
+ 
++// sgnano: SGX 版は表を作らず、番号から値を計算する（platform/sgx_pov/pov_hashrand.h。表は 256KB ずつで PSRAM が足りなかった。2026-11-06）
++#ifdef POV_RAND_HASHED
++static HashedDoubleSequence PatternRands(0.0, 1.0);
++#else
+ static RandomDoubleSequence PatternRands(0.0, 1.0, 32768);
++#endif
+ static int BinomialCoefficients[((FRACTAL_MAX_EXPONENT+1)*(FRACTAL_MAX_EXPONENT+2))/2]; // GLOBAL VARIABLE
+ boost::hash<Crackle_Cell_Coord> Crackle_Cell_Hasher;
+ static int CrackleCubeTable[81*3];

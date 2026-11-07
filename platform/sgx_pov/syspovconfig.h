@@ -113,4 +113,8 @@ inline bool ParsePathString(const P &path, V &volume, C &components, F &filename
 // 模様・ワープの乱数は表を作らず番号から計算する（pov_hashrand.h。表は 256KB ずつで PSRAM が足りなかった。2026-11-06）
 #define POV_RAND_HASHED 1
 
+// POVMS の返事を待つ上限（秒。上流は 10）。FB を出したまま走らせると QMI の関所で全体が約 20 倍遅く、ESC で止めたあとの
+// 後片付けの返事（DisconnectFromBackend）が 10 秒に間に合わず時間切れの例外になった（2026-11-07）
+#define kDefaultTimeout 60
+
 #endif // __SYSPOVCONFIG_H__
