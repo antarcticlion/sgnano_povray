@@ -30,6 +30,7 @@
  *******************************************************************************/
 
 #include <cassert>
+#include <cstring>
 #include <stdexcept>
 #include <map>
 
@@ -171,10 +172,34 @@ void RandomIntSequence::Generator::SetSeed(size_t seedindex)
 	index = seedindex % sequence->values.size();
 }
 
+#ifdef POV_RAND_HASHED
+static inline double HashedUnit(uint64_t z)
+{
+	z += 0x9E3779B97F4A7C15ull;
+	z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9ull;
+	z = (z ^ (z >> 27)) * 0x94D049BB133111EBull;
+	z ^= z >> 31;
+	return (double)(z >> 11) * (1.0 / 9007199254740992.0);
+}
+// 元の RandomDoubles は種の決まった mt19937 で作るので、同じ引数の並びはどれも同じ値になる。こちらも引数だけから salt を作る
+// （作った順にすると、スレッドの作られ方や再開の前後で値が変わる）
+static uint64_t SequenceSalt(double minval, double maxval, size_t count)
+{
+	uint64_t a, b; memcpy(&a, &minval, sizeof a); memcpy(&b, &maxval, sizeof b);
+	return (a * 0xD6E8FEB86659FD93ull) ^ (b * 0x9E3779B97F4A7C15ull) ^ ((uint64_t)count << 17);
+}
+RandomDoubleSequence::RandomDoubleSequence(double minval, double maxval, size_t cnt) :
+	lo(minval), span(maxval - minval), count(cnt ? cnt : 1), salt(SequenceSalt(minval, maxval, cnt))
+{
+}
+size_t RandomDoubleSequence::Size() const { return count; }
+#else
 RandomDoubleSequence::RandomDoubleSequence(double minval, double maxval, size_t count) :
 	values(RandomDoubles(minval, maxval, count))
 {
 }
+size_t RandomDoubleSequence::Size() const { return values.size(); }
+#endif
 
 RandomDoubleSequence::Generator::Generator(RandomDoubleSequence *seq, size_t seedindex) :
 	sequence(seq),
@@ -184,13 +209,17 @@ RandomDoubleSequence::Generator::Generator(RandomDoubleSequence *seq, size_t see
 
 double RandomDoubleSequence::operator()(size_t seedindex)
 {
+#ifdef POV_RAND_HASHED
+	return lo + span * HashedUnit((uint64_t)(seedindex % count) ^ salt);
+#else
 	seedindex = seedindex % values.size();
 	return values[seedindex];
+#endif
 }
 
 double RandomDoubleSequence::Generator::operator()()
 {
-	index = (index + 1) % sequence->values.size();
+	index = (index + 1) % sequence->Size();
 	return (*sequence)(index);
 }
 
@@ -206,7 +235,7 @@ size_t RandomDoubleSequence::Generator::GetSeed() const
 
 void RandomDoubleSequence::Generator::SetSeed(size_t seedindex)
 {
-	index = seedindex % sequence->values.size();
+	index = seedindex % sequence->Size();
 }
 
 

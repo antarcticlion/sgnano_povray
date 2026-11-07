@@ -54,6 +54,10 @@ typedef struct {
     // PNG の RGB 作業場。SGX では FB の余りページを優先する（NULL 可）。
     void *(*scratch_alloc)(uint32_t bytes);
     void  (*scratch_free)(void *p);
+    // 省略可（2026-11-07）: 保存を 1 度に 1 つにする鍵。put_block（フロントエンドのスレッド）と tick・finish（入口のスレッド）が
+    // 同時に保存すると、同じ行を 2 回数えた（02 で 484/480）。NULL なら鍵を掛けない（1 つのスレッドだけで使うとき）
+    void  (*lock)(void);
+    void  (*unlock)(void);
 } sgnano_app_platform_t;
 
 typedef struct {
@@ -74,6 +78,11 @@ bool     sgnano_app_init(const sgnano_app_config_t *cfg, const sgnano_app_platfo
 bool     sgnano_app_restore_fb(void);   // defer_fb_restore のとき、FB が使えるようになってから呼ぶ
 uint32_t sgnano_app_resume_row(void);
 uint32_t sgnano_app_lines_done(void);
+uint32_t sgnano_app_lines_drawn(void);   // 描き終えた行（チェックポイントに書けたかによらない。2026-11-06）
+bool     sgnano_app_checkpoint_now(void);  // 描けたのに書けていない行を今すぐ書く（待ちを無視）。true = 書き残しなし（2026-11-07）
+uint32_t sgnano_app_ckp_fails(void);       // チェックポイントの保存に失敗した回数（やり直して通れば数は残る）
+// 切り分け用（2026-11-06）: put_block の回数・チェックポイントが最初に失敗した所（1 頭 2 fb_get 無し 3 行の書き込み 4 / 5 読み出し）・0 行目の済んだ升の数
+void sgnano_app_debug(uint32_t *puts, int *why, bool *err, uint32_t *cells0, uint32_t *cells_per_line);
 bool     sgnano_app_all_done(void);
 
 // POV-Ray の表示ブロック（確定画素）。x1..x2, y1..y2 は両端を含む。

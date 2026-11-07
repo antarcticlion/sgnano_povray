@@ -96,8 +96,17 @@ class RandomDoubleSequence
 				RandomDoubleSequence *sequence;
 				size_t index;
 		};
+		size_t Size() const;
 	private:
+#ifdef POV_RAND_HASHED
+		// sgnano（2026-11-06）: 値を持たず、番号から計算する（platform/sgx_pov/pov_hashrand.h と同じ混ぜ方）。
+		// 32768 個の double を持つと 1 つ 256KB で、描くスレッドごとの Trace・MediaFunction・RadiosityFunction が 1 つずつ持ち、PSRAM が尽きた
+		double lo, span;
+		size_t count;
+		uint64_t salt;
+#else
 		vector<double> values;
+#endif
 };
 
 

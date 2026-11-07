@@ -1,0 +1,4 @@
+#ifndef POVRAY_SGX_COMPAT_BOOST_THREAD_CONDITION_HPP
+#define POVRAY_SGX_COMPAT_BOOST_THREAD_CONDITION_HPP
+#include <boost/thread.hpp>
+#endif

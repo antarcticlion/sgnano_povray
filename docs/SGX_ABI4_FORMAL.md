@@ -148,3 +148,14 @@ sgnano_povray の実機テストが済んだら、sgnano 側で ABI に組み込
 - 形は素案の §4.3〜4.4 とほぼ同じ: モジュールは番地 0 に結び、`init(ctx, iface, size)` が関数の表を埋める。常駐の機能は `ctx->host`。替えたら前の番地はすべて無効（pin する）。
   素案との違い: スロットの数・大きさは常駐が `sgx_ovl_add_slot` で決める（パックには持たない）。名前で引ける（`sgx_ovl_find`）。`.init_array`・例外の表は持てない（C++ の静的な初期化はモジュールに置けない）
 - 確かめ: QEMU（Cortex-M33）で約 1MB のモジュールを 128KB x 2 のスロットへ 300 回入れ替え、すべて一致（`scripts/test_overlay.py`）。**実機は未確認**
+
+---
+
+## 6. ABI 4.1（2026-11-06 追記）
+
+- **オーバーレイが表に入った**（`ovl_open` / `ovl_add_slot` / `ovl_add_slot_mem` / `ovl_count` / `ovl_find` / `ovl_info` / `ovl_load` / `ovl_bind` /
+  `ovl_unload` / `ovl_loaded` / `ovl_pin` / `ovl_unpin` / `ovl_gen` / `ovl_stats` / `ovl_close`）。中身は SDK の `sgx_overlay.c` と同じで、ファームがパックの
+  ファイルとスロットの PSRAM を受け持つ。説明は sgnano の `docs/sgx_abi.md` §10。実機の `ovltest` で SDK の道・ABI の道とも一致
+- `fb_lend_spare` は番地の小さい順に返す
+- SDK の `calloc` の無限再帰を直した（`-fno-builtin` は要らない。「mode 2 で store_open が止まる」の正体）
+- 4.0 で組んだ `.sgx` はそのまま動く

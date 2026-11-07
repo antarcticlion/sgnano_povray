@@ -25,6 +25,9 @@ bool sgnano_sgx_lend_spare(void);
 // ABI 4.0 の fb_lend_spare で借りた FB の余りページ（連続しているとは限らない）。
 void *sgnano_sgx_spare_base(void);
 uint32_t sgnano_sgx_spare_bytes(void);
+unsigned sgnano_sgx_spare_to_heap(void);
+bool sgnano_sgx_enter_preview(uint32_t width, uint32_t height);   // 描いている間はモード 7 に縮めて出す（FB のページ 0 には全部を書く）
+bool sgnano_sgx_show_fb(void);                                     // 描き終えたらモード 2 で FB を出す   // 借りた余りのページを malloc のヒープに足す（足したバイト数）
 
 // 切り分け用: false にすると fb_lend_spare を呼ばない（既定は true）。
 void sgnano_sgx_set_spare_enabled(bool on);

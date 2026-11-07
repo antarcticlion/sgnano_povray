@@ -34,6 +34,9 @@
 
 // frame.h must always be the first POV file included (pulls in platform config)
 #include "backend/frame.h"
+#ifdef POV_RAND_HASHED
+#include "pov_hashrand.h"   // sgnano（2026-11-06）
+#endif
 #include "backend/pattern/warps.h"
 #include "backend/pattern/pattern.h"
 #include "backend/texture/texture.h"
@@ -54,7 +57,12 @@ namespace pov
 
 const DBL COORDINATE_LIMIT = 1.0e17;
 
+// sgnano: SGX 版は表を作らず、番号から値を計算する（platform/sgx_pov/pov_hashrand.h。表は 256KB ずつで PSRAM が足りなかった。2026-11-06）
+#ifdef POV_RAND_HASHED
+HashedDoubleSequence WarpRands(0.0, 1.0);
+#else
 RandomDoubleSequence WarpRands(0.0, 1.0, 32768);
+#endif
 
 /*****************************************************************************
 * Static functions

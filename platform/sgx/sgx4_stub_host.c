@@ -113,8 +113,16 @@ static void h_text_clear(uint32_t attr) { (void)attr; }
 
 static int h_remove(const char *path) { return remove(path); }
 
+// 誤りを起こす（試し用、2026-11-07）: 次の n 回の store_get / store_flush / write_file を失敗させる
+static int g_fail_gets, g_fail_flushes, g_fail_writes;
+void sgnano_sgx_host_inject(int fail_gets, int fail_flushes, int fail_writes)
+{
+    g_fail_gets = fail_gets; g_fail_flushes = fail_flushes; g_fail_writes = fail_writes;
+}
+
 static int h_write_file(const char *path, const void *data, uint32_t len)
 {
+    if (g_fail_writes > 0) { g_fail_writes--; return -9; }
     if (!path || !data) return -1;
     FILE *f = fopen(path, "wb");
     if (!f) return -1;
@@ -149,6 +157,7 @@ static int h_store_open(const sgx_store_config_t *cfg)
 
 static void *h_store_get(int id, uint32_t block)
 {
+    if (g_fail_gets > 0) { g_fail_gets--; return NULL; }
     if (id < 0 || id >= MAX_STORES || !g_stores[id].f) return NULL;
     if (block >= g_stores[id].blocks) return NULL;
     const uint32_t bs = g_stores[id].block_size;
@@ -181,6 +190,7 @@ static int h_store_release(void *vp, int dirty)
 
 static int h_store_flush(int id)
 {
+    if (g_fail_flushes > 0) { g_fail_flushes--; return -9; }
     if (id < 0 || id >= MAX_STORES || !g_stores[id].f) return -1;
     if (fflush(g_stores[id].f) != 0) return -1;
     return fsync(fileno(g_stores[id].f)) == 0 ? 0 : -1;
@@ -269,3 +279,6 @@ void sgnano_sgx_host_shutdown(void)
 }
 
 uint16_t *sgnano_sgx_host_fb(void) { return g_fb; }
+
+// SDK だけの関数の代わり（2026-11-06）。ホストではヒープに足さない（余りのページは PNG の作業場のまま使う）
+int sgx_heap_add_region(void *p, uint32_t bytes) { (void)p; (void)bytes; return -1; }

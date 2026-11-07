@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026-11-07 — povray.sgx renders on the hardware (sgnano SGX ABI 4.3)
+
+- New SGX front end `app/sgx/povray_sgx.cpp` (`povray.sgx SCENE.pov [opts] [-fresh] [-fbview] [-nofb]`):
+  vfe session, `SgxDisplay` (RGB555), checkpoint/PNG next to the scene, status lines on the text plane.
+  - While rendering it shows a 266x200 preview in screen mode 7 (SRAM, 6x7x6 colours) and switches to
+    mode 2 at the end to show the 640x480 FB (sgnano ABI 4.3). With the FB on screen the SGX tasks wait
+    for the FB fetch and rendering was about 20x slower. `-fbview` keeps the old mode-2 path.
+  - Progress counts drawn lines separately from the lines saved in the checkpoint (4 lines at a time
+    with 4x4 blocks). The PNG is written once every line is drawn, even if a checkpoint write failed.
+- Threading layer `compat_sgx/boost/thread.hpp` on SGX tasks / mutexes / semaphores:
+  - No exclusive load/store (LDREX/STREX, LDAEX/STLEX): they never succeed on PSRAM (the program image,
+    .bss and heap). Counters are guarded by one SGX mutex.
+  - Backend threads (`Task::NewBoostThread`, created with attributes) run one priority level below the
+    front end, so render-block messages do not pile up in front of the vfe worker. `yield` sleeps 20 us
+    (the API `yield` sleeps 1 ms). Default stack 64 KB.
+- Linked with the full `libstdc++.a` / `libsupc++.a` through the SDK `sgx_link_cxx()`
+  (the nano versions have no unwind tables, so no `catch` was ever reached) and `-u _scanf_float`
+  (the tokenizer reads numbers with `sscanf("%lf")`).
+- `POV_RAND_HASHED` (SGX only): `RandomDoubleSequence` and the warp/pattern tables compute values from
+  the index (splitmix64) instead of holding 32768 doubles (256 KB each, one per Trace / MediaFunction /
+  RadiosityFunction per thread). Host peak heap 2.4 MB -> 0.86 MB. The host build is unchanged.
+- Default `+WT1`.
+- The spare FB pages (1.8 MB) are given to the heap (`sgnano_sgx_spare_to_heap`).
+- Hardware: `00_fast_sphere` 640x480 done in 291.2 s, PNG within RGB555 rounding of the host image.
+- Checkpoint robustness (`app/sgnano_app.c`):
+  - A failed save no longer sticks. Lines that are drawn but not saved are retried with a 1 s -> 10 s backoff
+    (the pixels stay in FB page 0). Pending lines are saved in one batch per block: line data -> flush ->
+    bitmap bits -> one header commit. A failed header write keeps the bits and retries only the header.
+  - Stop / failure / uncaught exception: the pending lines are saved (3 tries) and `<scene>.partial.png` is written.
+  - The checkpoint is removed only after the PNG is written; a failed PNG keeps it so a resume can write the PNG.
+  - `sgnano_app_checkpoint_now()`, `sgnano_app_ckp_fails()`. Flush failures are recorded (`why` 6 / 7).
+  - Host test `tests/test_sgx_ckp_faults.c` with fault injection in the host stub (`sgnano_sgx_host_inject`): 19/19.
+- Backend threads get 128 KB stacks (the trace thread overflowed 64 KB in 02_arch_perspective).
+- Hardware times for all scenes: `docs/TESTING.md`.
+
+## 2026-11-06 — sgnano SGX ABI 4.1
+
+- Moved to the sgnano SGX ABI 4.1 headers (`third_party/sgnano/sgx_api.h`,
+  `sgx_overlay.h`). 4.1 adds the overlay functions `ovl_*` and returns the
+  `fb_lend_spare` pages in ascending address order.
+- Removed the workarounds that ABI 4.1 makes unnecessary:
+  - `-fno-builtin` for the probe: the SDK `calloc` no longer recurses
+    (the SDK now calls `memset` through a function pointer).
+  - The page sort after `fb_lend_spare`.
+  - Opening the block store in mode 1: the "store_open hangs in mode 2" was
+    the `calloc` recursion right before `store_open` in `sgnano_app_init`.
+    `povprobe` now opens the store in mode 2 (`text` as the 5th argument keeps
+    the old mode-1 order).
+- Hardware: `tools/hw_probe.py` PASS with the store opened in mode 2
+  (`store_open_mode=2`, fresh 120 -> resume -> fresh identical, lossless PNG).
+
 ## 2026-11-06 — initial port scaffold
 
 - Imported POV-Ray 3.7.0.10 source (AGPL-3.0-or-later) and Boost 1.62.0 headers.

@@ -325,10 +325,14 @@ int sgx_main(const sgx_api_t *api, int argc, char **argv)
         say("firmware has no block store (ABI 4.0)\n");
         return 1;
     }
-    if (!sgnano_sgx_init_text(W, H)) {
-        say("mode 1 failed\n");
+    // 【2026-11-06】mode 2 のままストアを開く（ABI 4.1 のファームで止まらないことを確かめる）。
+    // 引数の 5 番目に "text" を渡すと、以前の回避（ストアを開く間だけ mode 1）で走る
+    const bool text_open = argc > 4 && !strcmp(argv[4], "text");
+    if (!(text_open ? sgnano_sgx_init_text(W, H) : sgnano_sgx_enter_fb(W, H))) {
+        say(text_open ? "mode 1 failed\n" : "mode 2 failed\n");
         return 1;
     }
+    rep("store_open_mode=%d\n", text_open ? 1 : 2);
 
     report_drives();
     report_memory();

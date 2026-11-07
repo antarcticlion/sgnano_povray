@@ -12,6 +12,7 @@ extern "C" {
 bool sgnano_sgx_host_init(uint32_t width, uint32_t height);
 void sgnano_sgx_host_shutdown(void);
 uint16_t *sgnano_sgx_host_fb(void);
+void sgnano_sgx_host_inject(int fail_gets, int fail_flushes, int fail_writes);   // 次の n 回を失敗させる（試し用）
 
 #ifdef __cplusplus
 }

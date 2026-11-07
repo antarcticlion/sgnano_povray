@@ -16,9 +16,12 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "sgx_overlay.h"                       // オーバーレイの型（ABI 4.1。SDK の部品 sgx_overlay.c と同じもの）
 
 #define SGX_ABI_MAJOR 4
-#define SGX_ABI_MINOR 0                          // 4.0（2026-11-06）: ブロックストア（store_*）・FB の余りのページを借りる fb_lend_spare と SGX_EBUSY を足した。表の並びは 3.5 の後ろに足しただけ。
+#define SGX_ABI_MINOR 3                          // 4.3（2026-11-07）: fb_lend_spare をモード 7 でも貸す・貸している間もモード 0・1・2・7 へは替えてよい（表は 4.2 と同じ）
+                                                 // 4.2（2026-11-07）: voice ごとの stream_* を末尾に足した。4.1 以前のプログラムはそのまま動く
+                                                 // 4.0（2026-11-06）: ブロックストア（store_*）・FB の余りのページを借りる fb_lend_spare と SGX_EBUSY を足した。表の並びは 3.5 の後ろに足しただけ。
                                                  //      ファームは 3.x のプログラムもそのまま走らせる（SGX_ABI_COMPAT_MAJOR）。4.0 で組んだものは 4.x のファームだけ
                                                  // 3.5（2026-11-06）: stderr へ書く term_write_err を末尾に足した（3.4 は request_tracker）
                                                  // 3.3（2026-11-04）: 組み込みアプリの UI の訳（translate）と SGX_F_LOCALIZE を足した
@@ -546,16 +549,56 @@ struct sgx_api {
     // いまは 3 ページ = 1.8MB）を PSRAM として借りる。番地はキャッシュを通る窓。借りたページ数を返す（モードが違う・もう借りている・keep が悪いと 0）。
     // 借りている間は、借りたページへの set_disp_page / set_write_page・fb_page・fb_blit の元は効かず、set_mode は断る。
     // 返すのは fb_return（黒で消す）か、プログラムの終わり。FB を使わないモードで全ページを借りるのは今までどおり fb_borrow
-    unsigned (*fb_lend_spare)(int keep, void **pages, unsigned max, uint32_t *page_bytes);
+    unsigned (*fb_lend_spare)(int keep, void **pages, unsigned max, uint32_t *page_bytes);   // 4.1 から番地の小さい順に並べて返す
+
+    // ==== ABI 4.1（2026-11-06）: オーバーレイ ====
+    // パック（sgx_ovl_pack.py で作る .ovl）からモジュールをスロットへ読み込んで、関数の表を通して呼ぶ（docs/sgx_abi.md §10）。
+    // 中身は SDK の sgx_overlay.c と同じ（ファームはパックのファイルとスロットの PSRAM を受け持つ）。プログラムごとにパック 1 つ。
+    // 誤りは負の SGX_E*。プログラムが終わればパックを閉じ、ovl_add_slot で取ったスロットを返す
+    int      (*ovl_open)(const char *path, const void *host);           // パックを開く（前のパックとスロットは閉じる）。host は init の ctx->host
+    int      (*ovl_add_slot)(uint32_t bytes);                            // ファームが PSRAM から取る。スロットの番号
+    int      (*ovl_add_slot_mem)(void *base, uint32_t bytes);            // プログラムの置き場（psram_alloc・fb_lend_spare のページ。キャッシュを通る窓、8 バイト整列）
+    int      (*ovl_count)(void);
+    int      (*ovl_find)(const char *name);                              // 名前から番号（無ければ負）
+    int      (*ovl_info)(int module, sgx_ovl_entry_t *out);
+    int      (*ovl_load)(int slot, int module);                          // もう載っていれば 0 で何もしない。pin のスロットは -SGX_EBUSY
+    int      (*ovl_bind)(int slot, int module, void *iface, uint32_t iface_size);   // 読み込んで init を呼ぶ（init の戻り値）
+    int      (*ovl_unload)(int slot);
+    int      (*ovl_loaded)(int slot);                                    // 載っているモジュールか -1
+    int      (*ovl_pin)(int slot);
+    int      (*ovl_unpin)(int slot);
+    uint32_t (*ovl_gen)(int slot);                                       // 読み込むたびに増える（iface が古くなったか）
+    int      (*ovl_stats)(sgx_ovl_stats_t *out);
+    void     (*ovl_close)(void);
+
+    // ==== ABI 4.2（2026-11-07）: voice ごとのストリーム ====
+    // 既存の pcm_* は最後のポート固定・1 本だけ。こちらは任意の PT8211 ポートに
+    // 独立したリング（4KB = 44.1kHz で約23ms）を持つ。開閉はアプリ時間に片づける。
+    // stream_write は「左, 右」の 16bit 符号付き。戻り値は書けたフレーム数（負 = SGX_E*）。
+    // 書き込みはノンブロッキング。空きは stream_space で見る。
+    int      (*stream_open)(unsigned port, unsigned rate_hz);          // 0 = 成功、負 = SGX_E*（EBUSY など）
+    int      (*stream_write)(unsigned port, const int16_t *stereo, unsigned frames);
+    unsigned (*stream_space)(unsigned port);                            // 書けるフレーム数
+    void     (*stream_close)(unsigned port);
+    unsigned (*stream_underruns)(unsigned port);                        // 追い越された回数
 };
 
 // ---- SDK のヒープ（2026-11-03）----
 // malloc/free は 64KB から始まり、空きが 32KB を切ると 64KB 増える。空きが 128KB になると
 // 空いた 64KB を返す。大きな作業場を先に確保したいときは sgx_heap_reserve() を呼ぶ。
 // 戻り値は、いま確保してある合計（予約が足りなければ足りた分）。
+#ifdef __cplusplus
+extern "C" {   // C++ のプログラムからも呼べるように（2026-11-06）
+#endif
 uint32_t sgx_heap_reserve(uint32_t bytes);
+// 置き場をヒープに足す（2026-11-06、SDK だけの関数）。fb_lend_spare で借りたページなどを malloc に使わせる。足した置き場は
+// ヒープが縮むときも返さない。0 = 足した。malloc / free / realloc はミューテックスで守る（同じ優先度のタスクどうしでも壊れない）
+int sgx_heap_add_region(void *p, uint32_t bytes);
 uint32_t sgx_heap_total(void);
 uint32_t sgx_heap_free_bytes(void);
 uint32_t sgx_heap_min_bytes(void);
+#ifdef __cplusplus
+}
+#endif
 
 #endif

@@ -12,6 +12,8 @@ POV-Ray 本体を載せる前に、実機で次の層を確かめるための小
 
 ## ビルド上の注意（`calloc` の無限再帰）
 
+【訂正 2026-11-06】sgnano の SDK（ABI 4.1）で直したので、`-fno-builtin` は外した。下は記録として残す。
+
 sgnano SDK の `sgx_libc.c` の
 
 ```c
@@ -35,6 +37,9 @@ void *calloc(size_t a, size_t b) {
 
 - 38GB HDD の exFAT（C:）で `storetest` は 47/47 通った。4KB×64 の
   作成は 869ms、64KB×32（2MB）は 3289ms。
+- 【訂正 2026-11-06】下の「mode 2 で止まる」は、`store_open` の直前に `sgnano_app_init` が呼ぶ
+  `calloc` の無限再帰だった（ABI 4.1 の SDK で直った）。いまの `povprobe` は mode 2 のまま開いて PASS。
+  ページの並べ替えも、4.1 のファームが番地の小さい順に返すので外した。
 - **mode 2 で FB を出したまま `store_open` すると、実機で止まった**
   （`store: opening ...` のまま 4 分以上）。同じ大きさの普通の
   `write_file` は mode 2 でも 1.2 秒で通る。`create_zero` を避けて
