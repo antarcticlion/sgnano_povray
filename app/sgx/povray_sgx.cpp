@@ -5,7 +5,7 @@
 // - ファイラーの対応表（S:/SystemSettings/FileTypes.cfg の `pov = S:/bin/povray.sgx %f`）と、シェルの `povray SCENE.pov` から走らせる
 // - 描いている間はモード 7（320x200 の縮小、SRAM）、終わったらモード 2 で 640x480（ABI 4.3。FB を出していると 20 倍遅い）。
 //   -fbview で描いている間もモード 2（-nofb はそのとき FB を隠す）
-// - 描いた行は app/sgnano_app.c がチェックポイント（SCENE.ckp、ブロックストア）・FB のページ 0・PNG（SCENE.png）へ
+// - 描いた行は app/sgnano_app.c がチェックポイント（カレントディレクトリの SCENE.ckp、ブロックストア）・FB のページ 0・PNG（シーンの隣の SCENE.png）へ
 // - ESC（SGX_F_ESC_KEY）で自分で止める: 描けた分を救い出し SCENE.partial.png を残す。次に同じシーンを走らせると続きから描く（-fresh で最初から）。
 //   Shift+ESC はファームが強く止める（書けた行はチェックポイントに残る）
 // - スレッドは compat_sgx/boost/thread.hpp（M33BEATOS のタスク）、VFE のプラットフォームは platform/sgx_pov
@@ -149,6 +149,12 @@ static std::string with_ext(const std::string &scene, const char *ext)
 	const size_t slash = scene.find_last_of('/'), dot = scene.find_last_of('.');
 	const std::string base = (dot != std::string::npos && (slash == std::string::npos || dot > slash)) ? scene.substr(0, dot) : scene;
 	return base + ext;
+}
+// "C:/dir/scene.pov" -> "scene.pov"（チェックポイントはカレントディレクトリに作る）
+static std::string base_name(const std::string &p)
+{
+	const size_t slash = p.find_last_of('/');
+	return slash == std::string::npos ? p : p.substr(slash + 1);
 }
 static std::string dir_of(const std::string &p)
 {
@@ -332,7 +338,8 @@ extern "C" int sgx_main(const sgx_api_t *api, int argc, char **argv)
 	sgx_heap_trace_min = 0;
 	Args a;
 	if (!parse_args(argc, argv, a)) return 2;
-	const std::string ckp = with_ext(a.scene, ".ckp"), png = with_ext(a.scene, ".png"), dir = dir_of(a.scene);
+	// チェックポイントはカレントディレクトリ（相対名）。シーンは別のドライブでもよい。
+	const std::string ckp = with_ext(base_name(a.scene), ".ckp"), png = with_ext(a.scene, ".png"), dir = dir_of(a.scene);
 	const uint32_t t0 = sgx->ms();
 	sayf("POV-Ray 3.7 for sgnano: %s (%ux%u)\n", a.scene.c_str(), a.W, a.H);
 	if (a.fresh) remove(ckp.c_str());
