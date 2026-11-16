@@ -1,196 +1,282 @@
 # sgnano_povray
 
-POV-Ray 3.7 を sgnano（RP2350 のビデオコンソール）の **SGX アプリ**として動かすための移植プロジェクト。
+**POV-Ray 3.7 for the [sgnano](https://github.com/antarcticlion/sgnano) RP2350
+video console.** It runs as a standalone SGX application, renders directly
+into the 640×480 RGB555 framebuffer, and writes line-by-line checkpoints so an
+interrupted render can resume.
 
-- 本体ファームとは分離し、AGPL の POV-Ray コードをファームにリンクしない。
-- 画面は **mode 2（テキスト＋640×480 RGB555）**、フレームバッファは1ページを想定。
-- 途中で終了しても **1 ライン単位のチェックポイント**から再開できる。
-- 描画中はテキスト面（ホストでは stderr）に進捗・ETA・チェックポイント状態を出す。
+![Crystal Bloom](docs/images/crystal_bloom.png)
 
-## いまの状態
+*Crystal Bloom — a host render of `showcase/crystal_bloom.pov` (1280×960).*
 
-| 項目 | 状態 |
+> This is an unofficial port. It is not supported by the POV-Ray team.
+> The application is licensed under **AGPL-3.0-or-later** because it is built
+> on POV-Ray 3.7.
+
+## Status
+
+| Item | State |
 |---|---|
-| POV-Ray 3.7.0.10 の取り込み | 完了 |
-| ホスト版のビルド | 完了（`build_host/povray_host`） |
-| 簡単なシーンの描画 | 完了（`tests/scenes/simple.pov`） |
-| チェックポイント／再開 | 完了（ホストで途中終了→再開→完成画像の一致を確認） |
-| SGX 4.0 ABI | 正式版を受領（`third_party/sgnano/sgx_api.h`、ブロックストア＋`fb_lend_spare`） |
-| SGX 側のスタブ | 正式 ABI 4.0 の型に更新済み（`platform/sgx/sgx4_stub.h`、`app/sgx/`） |
-| FB の余りページ | `fb_lend_spare` で 3 ページ（約1.8MB）を借り、PNG 作業場に使用 |
-| 出力 | FB / 可逆圧縮 PNG（miniz）を選択可能 |
-| 実機プローブ | `apps/povprobe`（mode 2・チェックポイント・PNG・38GB HDD） |
-| 進捗表示 | テキスト面に進捗バー＋UART に `progress` 行 |
-| ARM サイズ測定 | 完了（`source/` 全体で 1.41MB、libc 別） |
+| Host build (`povray_host`) | Works on Linux/macOS with CMake |
+| SGX build (`povray.sgx`) | Works with the vendored MIT SGX SDK, **ABI 5.11** |
+| SGX image size | 1,518,744 B image + 15,532 relocations = 1,580,872 B `.sgx` |
+| Real hardware | 640×480 `00_fast_sphere` in 193.4 s render; 320×240: 12 scenes complete within 5 min, `11_slow_spheres` exceeds PSRAM |
+| Line checkpoint / resume | Works (block store, 4096-byte blocks) |
+| Output | FB + lossless PNG (miniz deflate level 9) |
+| Progress | Text-plane progress bar, ETA, and UART progress |
+| Test scenes | 13 scenes, host-rendered in 6.2–10.2 s each at 640×480 |
 
-## クイックスタート（ホスト）
+The pre-built `povray.sgx` is **not** committed; build it from source with the
+vendored SDK (see below). The released binary must be accompanied by the
+corresponding source under the AGPL.
+
+## Showcase
+
+The scenes in [`showcase/`](showcase/) were written for this port. They are
+self-contained (only the stock POV-Ray include files) and use mirror-like
+metals, glass, emissive softboxes, and mirror floors.
+
+| | |
+|---|---|
+| [![Crystal Bloom](docs/images/crystal_bloom.png)](showcase/crystal_bloom.pov) | [![Neon Velocity](docs/images/neon_velocity.png)](showcase/neon_velocity.pov) |
+| *Crystal Bloom* | *Neon Velocity* |
+| [![Gold Gyroscope](docs/images/gold_gyroscope.png)](showcase/gold_gyroscope.pov) | |
+| *Gold Gyroscope* | |
+
+All three are 1280×960 host renders with antialiasing (`+A0.25 +AM2 +R2`).
+Render one with:
+
+```sh
+./build_host/povray_host +Ishowcase/crystal_bloom.pov +Ocrystal_bloom.png \
+  +W1280 +H960 +FN +A0.25 +AM2 +R2 +Q9 +Lthird_party/povray/include
+```
+
+## Real hardware
+
+![Test scenes rendered on sgnano at 320×240](docs/images/hardware_320x240.png)
+
+*PNGs written by `povray.sgx` on a real sgnano (ABI 5.11) at 320×240. The 12
+completed scenes were also compared with host renders after RGB555 rounding:
+the maximum channel difference was 9/255.*
+
+| Run | Result |
+|---|---|
+| 640×480 `00_fast_sphere` | done, 193.4 s render / 199.8 s total |
+| 320×240 `00`–`10` | done, 56.5–283.9 s total per scene |
+| 320×240 `simple` | done in 62.4 s |
+| 320×240 `11_slow_spheres` | stopped at the 5-minute cap while parsing; the 10,000-sphere scene needs more PSRAM than the 8MB available |
+
+Each hardware scene ran with a 300-second cap (`tools/render_all_sgx.py`). The
+640×480 proof PNG also matches the host render after RGB555 rounding (maximum
+channel difference 9/255). See [`docs/TESTING.md`](docs/TESTING.md) for the
+per-scene table.
+
+## Features
+
+- **Mode 7 preview while rendering** (320×200, SRAM) and **mode 2 final
+  display** (640×480 RGB555). `-fbview` renders directly in mode 2.
+- **Line-by-line checkpointing** in the current directory. If the render is
+  stopped (ESC / power loss / timeout), run the same command again to resume.
+- **ESC saves a partial image**: `SCENE.partial.png` plus the checkpoint.
+- **Lossless PNG** written next to the scene (`SCENE.png`).
+- **FB spare pages**: `fb_lend_spare` borrows the three unused 600KB FB pages
+  (~1.8MB) and returns them to the heap for PNG scratch and thread stacks.
+- **UTF-8 / Japanese text** on the status plane.
+- **`povprobe.sgx`**: a small hardware test for mode 2, block-store
+  checkpoints, `fb_lend_spare`, and PNG/raw pixel comparison.
+
+## Requirements
+
+### Host build
+
+- CMake 3.16+, Ninja, a C++11 compiler
+- libpng, libjpeg, zlib development packages
+
+```sh
+sudo apt-get install -y cmake ninja-build g++ libpng-dev libjpeg-dev zlib1g-dev
+```
+
+### SGX build
+
+- `arm-none-eabi-gcc` / `arm-none-eabi-g++` (GCC 10.3.1 or newer)
+- Python 3 (used by `sgx_link.py`)
+
+```sh
+sudo apt-get install -y cmake ninja-build gcc-arm-none-eabi python3
+```
+
+The MIT-licensed sgnano SGX SDK is **vendored** under
+`third_party/sgnano/sdk/sgx/`, so no separate sgnano checkout is needed to
+build. Override with `-DSGNANO_SGX_SDK_DIR=...` if you use another SDK tree.
+
+## Build
+
+### Host
 
 ```sh
 cmake -S . -B build_host -G Ninja -DCMAKE_BUILD_TYPE=Release
 ninja -C build_host
 
+# Smoke tests
+./build_host/test_sgx_checkpoint
+./build_host/test_sgx_ckp_faults
+
+# Render a scene
 python3 tools/run_host.py tests/scenes/simple.pov build_host/simple.png \
   --width 640 --height 480 --output png
 ```
 
-`--output` は `fb`（画面に残すだけ）、`png`（可逆圧縮 PNG を保存）、
-`both`（PNG＋FB）から選べる。既定は `both`。
+`--output` is `both` (default), `png`, or `fb`. `--timeout N` stops the render
+after N seconds and keeps the checkpoint for a resume.
 
-途中で止めても、同じコマンドで続きから描画します。詳しくは
-[`docs/BUILD.md`](docs/BUILD.md)。
-
-### ARM サイズ（Phase 0）
-
-`arm-none-eabi-g++ -Os` で `source/` 全体（142 オブジェクト）をコンパイルした結果:
-
-| 区分 | サイズ |
-|---|---:|
-| `.text` | 1,234,352 B |
-| `.data` | 35,750 B |
-| `.bss` | 137,042 B |
-| **合計** | **1,407,144 B** |
-
-libc / libstdc++ は別。詳細は [`docs/PHASE0_SIZE.md`](docs/PHASE0_SIZE.md)。
-コードは 1ページ FB の PSRAM に余裕で収まるため、最初は「コード常駐＋
-メッシュ／テクスチャだけブロックストア」で進められます。
-
-### テストシーン
-
-`tests/scenes/` に 12 本ある（建築・車・都市・砂漠・水中・宇宙・静物・
-クリスタル・森など）。色は sRGB で、反射・ガラス・発光を使う。
-
-- `00_fast_sphere.pov`: すぐ終わるスモークテスト
-- `11_slow_spheres.pov`: 10,000 球の重いテスト（640×480 では数分）
-- 一覧と使い方: [`tests/scenes/README.md`](tests/scenes/README.md)
-- まとめて描く: `tools/render_scenes.sh 320 240 build_host/scenes`
-
-### 確認済みの動作
-
-- 640×480、1 スレッド、AA なし、4×4 ブロックで描画。
-- 2 秒で強制終了 → チェックポイント 97/480 ライン（v2、ヘッダ 2 部＋CRC32）。
-- 再実行で 97 行目から再開し、480/480 まで完成。
-- 再開して完成した PNG と、最初から描いた PNG がバイト単位で一致。
-
-### 実機プローブ（SGX）
-
-POV-Ray 本体の前に、実機でアプリ層を確かめる `povprobe.sgx` があります。
+### SGX
 
 ```sh
 cmake -S . -B build_sgx -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+  -DSGNANO_BUILD_SGX_POVRAY=ON \
   -DSGNANO_BUILD_SGX_PROBE=ON
-ninja -C build_sgx povprobe
-
-# 実機（38GB HDD の exFAT/NTFS パーティション。文字は再接続で変わります）
-RBRUN C:/POVTEST/povprobe.sgx	C:/POVTEST	fresh	120
-RBRUN C:/POVTEST/povprobe.sgx	C:/POVTEST	resume
-RBRUN C:/POVTEST/povprobe.sgx	C:/POVTEST	fresh
-
-# 自動で 3 パス＋PNG/生データの照合まで
-python3 tools/hw_probe.py
+ninja -C build_sgx povray povprobe
 ```
 
-描画中は画面に `line 120/480 (25.0%)` と進捗バー、UART に
-`progress 128/480 (26.6%) 1234 ms` を出します。詳しくは
-[`docs/HW_PROBE.md`](docs/HW_PROBE.md)。
+Outputs:
 
-#### 実機テスト結果（2026-11-06）
+- `build_sgx/sgx/povray.sgx` — the POV-Ray SGX application
+- `build_sgx/sgx/povprobe.sgx` — the hardware probe
 
-- USB 3.0 の **38,154MB HDD**（exFAT）を使用。ドライブ文字は再接続で
-  B: ⇔ C: が入れ替わるため、毎回自動検出する。
-- sgnano の `storetest.sgx`: **47/47 合格**。
-  4KB×64 の作成 869ms、64KB×32（2MB）の作成 3289ms。
-- `povprobe`: 120/480 で停止（6.4 秒、チェックポイント 655,360 B）→
-  再開して 480/480 完成（24.1 秒）。最初からの 480 行は 28.3 秒
-  （実描画 18.8 秒＋PNG 符号化・生データ書き出し・3 秒表示）。
-- 再開後の FB 検証: **0 bad rows / 0 bad pixels**、FB CRC `30d0c6dd`。
-- 生データ 614,400 B の CRC も `30d0c6dd`。
-- PNG 42,966 B（640×480）をデコードし、RGB555 生データと
-  **1 画素も違わず一致**。resume と fresh の PNG・生データはバイト単位で一致。
-- `fb_lend_spare`: 1,843,200 B（3 ページ）を借り、PNG の RGB 作業場に使用。
-- チェックポイントは完成後に削除（`final checkpoint 0 B`）。
-- テストシーン 15 ファイルを **`B:/POVTEST/scenes`** へ転送済み
-  （13 の `.pov`、`README.md`、`generate_scenes.py`）。
-- 全 13 シーンをホスト版 640×480 で表示テスト: **すべて完走**。
-  6.2〜10.2 秒/シーン（5 分上限に対して余裕）。PNG は
-  **`B:/POVTEST/renders`**、ログは `B:/POVTEST/renders/logs` へ転送済み。
-- 実機のファイラーで 12 枚の PNG を表示確認（640×480、`view=1`）。
-  `11_slow_spheres.png`（336KB）は開いて 92%（448 行）まで表示した約 22 秒で
-  ビューアが閉じ、ファイラーへ戻った（5 分上限には達していない）。
-- **SGX 版 POV-Ray の実行ファイルはまだ未完成**。実機で `.pov` を直接
-  描くには SGX フロントエンド（VFE 置き換え、単一スレッド Task）が必要。
-  現在実機で動くのは `povprobe.sgx`（アプリ層の検証）まで。
-- 途中で見つけた SDK の `calloc` 無限再帰は `-fno-builtin` で回避。
+The application uses only the SGX API table; it does not link sgnano
+firmware code. The SDK snapshot and its license are in
+`third_party/sgnano/`.
 
-## 設計の要点
+## Run on sgnano
 
-RP2350 の Cortex-M33 には MMU がないため、一般的な透過ページングは作れない。
-そこで SGX 4.0 では次の形にする。
+Copy `povray.sgx` and the scenes to the device (for example
+`G:/povray.sgx` and `B:/POVTEST/scenes/`), then run from the filer or `sgsh`:
 
-- **プログラム**: 正式 ABI 4.0 では常駐（ARM の `-Os` で約 1.4MB、libc 別）。
-  オーバーレイは 4.x で必要になったら足す。
-- **ヒープ**: ハンドル付きブロックストア（メッシュ、テクスチャ、シーン DB）。
-  実機の 38GB HDD（exFAT）では mode 2 のまま `store_open` すると止まるため、
-  ストアを開く間だけ mode 1（テキスト）にし、開いてから mode 2 へ入る。
-- **画面**: POV-Ray の画像バッファ（20B/画素）を持たず、RGB555 で FB へ直接書く。
-  mode 2 の余り 3 ページ（約 1.8MB）は `fb_lend_spare` で借り、PNG の作業場と
-  将来の POV-Ray ヒープに使う。ページは番地の順に並べ替えてから使う。
-
-POV-Ray 本体の SGX フロントエンド（`vfe/unix` の置き換え、単一スレッド Task、
-ファイル I/O）は別担当向けに
-[`docs/HANDOFF_SGX_FRONTEND.md`](docs/HANDOFF_SGX_FRONTEND.md)
-へ引き継ぎ済みです。
-
-詳細は [`SPEC_sgx4_overlay_store.md`](SPEC_sgx4_overlay_store.md) と
-[`docs/SGX_STUB.md`](docs/SGX_STUB.md)、sgnano 側の引き渡し
-[`docs/SGX_ABI4_FORMAL.md`](docs/SGX_ABI4_FORMAL.md)。正式 ABI 4.0 は
-[`third_party/sgnano/sgx_api.h`](third_party/sgnano/sgx_api.h)
-（ブロックストア `store_*` を含む）。`include/sgx4_api.h` は以前の設計案で、
-いまは正式 ABI が正。
-
-## リポジトリ構成
-
-```
-app/                     sgnano アプリ共通層（チェックポイント、PNG、状態、ホスト FB）
-app/sgx/                 SGX 用プラットフォーム実装（正式 ABI 4.0）
-platform/sgx/            このアプリが使う ABI 4.0 の口（正式ヘッダと同じ型）
-cmake/                   上流 Makefile.am から生成したソース一覧
-compat/                  Boost.Thread / jversion のホスト互換層
-compat_arm/              単一スレッドターゲット用の Boost.Thread スタブ
-docs/                    ビルド手順、上流からの変更点
-include/sgx4_api.h       以前の ABI 設計案（いまは正式 ABI が正）
-platform/host/config.h   ホスト用 config.h
-tests/scenes/            テストシーン 12 本（高速・低速を含む）
-tests/test_sgx_checkpoint.c  SGX スタブのチェックポイント／PNG テスト
-third_party/povray/      POV-Ray 3.7.0.10（AGPL、ローカルパッチあり）
-third_party/boost/       Boost 1.62.0 ヘッダ（Boost License）
-third_party/sgnano/      正式 SGX ABI 4.0 ヘッダ（MIT）
-third_party/miniz/       PNG 用 miniz 3.1.2（MIT）
-tools/run_host.py        チェックポイント付き実行ラッパー（PNG/FB 出力）
+```text
+RBRUN G:/povray.sgx	B:/POVTEST/scenes/00_fast_sphere.pov	+W160	+H120	-fresh
 ```
 
-## 上流からの変更
+- `+W` / `+H`: output size (16..640 × 16..480).
+- `-fresh`: delete the checkpoint and start from the beginning.
+- `-fbview`: show mode 2 while rendering (much slower).
+- `-nofb`: hide the FB while rendering.
+- ESC: stop, write the finished lines and `SCENE.partial.png`; run again to
+  resume. Shift+ESC / `RSTOP` is a hard stop (the checkpoint keeps finished
+  lines).
 
-POV-Ray 3.7.0.10 に対する変更は
-[`docs/UPSTREAM_CHANGES.md`](docs/UPSTREAM_CHANGES.md) にまとめてある。
-パッチは `third_party/povray/patches/` に置いている。
+The checkpoint is `SCENE.ckp` in the **current directory**; the PNG is
+`SCENE.png` next to the scene. The checkpoint is line-based and assumes
+single-threaded, AA-disabled rendering (`+WT1 -A`, forced by the frontend).
 
-## ライセンス
+### Hardware probe
 
-- アプリ本体: **AGPL-3.0-or-later**（POV-Ray 3.7 に基づくため）。[`LICENSE`](LICENSE)
-- `include/sgx4_api.h`（設計案）: **MIT**。[`LICENSES/MIT.txt`](LICENSES/MIT.txt)
-- sgnano SGX ABI 4.0 ヘッダ: **MIT**（[`third_party/sgnano/sgx_api.h`](third_party/sgnano/sgx_api.h)）
-- POV-Ray: AGPL-3.0-or-later（[`third_party/povray/COPYING`](third_party/povray/COPYING)）
-- Boost: Boost Software License 1.0（[`third_party/boost/LICENSE_1_0.txt`](third_party/boost/LICENSE_1_0.txt)）
-- miniz: MIT（[`third_party/miniz/LICENSE`](third_party/miniz/LICENSE)）
+```sh
+SGNANO_ROOT=$HOME/Project/sgnano python3 tools/hw_probe.py
+```
 
-配布時は POV-Ray のソースと本リポジトリの変更点を含めること。詳細は
-[`NOTICE`](NOTICE) を参照。開発の決まりは [`CONTRIBUTING.md`](CONTRIBUTING.md)。
+This uploads `povprobe.sgx`, runs three passes (fresh 120 lines → resume →
+fresh), downloads the PNG and RGB555 raw files, and verifies that the PNG is
+pixel-identical to the raw dump. It also checks the 20GB+ drive requirement.
+The drive letter of the USB HDD can move between B: and C: after USB host
+restarts; the script re-detects it before every pass. `SGNANO_ROOT` is needed
+only for the hardware probe, because the ZMODEM helper (`scripts/zm.py`) lives
+in the sgnano repository; building and running on the device do not need it.
 
-## ロードマップ
+## Test scenes
 
-1. 実機が空くのを待ち、SGX 4.0 の `store_*` と mode 2 で起動する。
-2. POV-Ray の SGX 用フロントエンド（`vfe/unix` の置き換え）を作る。
-3. メッシュ／テクスチャをブロックストアへ載せる。
-4. Boost をさらに削り、実機のメモリと速度を詰める。
-5. 実機でチェックポイント再開と PNG 保存を確認する。
+`tests/scenes/` contains 13 self-contained scenes (no external includes),
+generated by `tests/scenes/generate_scenes.py`:
+
+- `00_fast_sphere.pov` — smoke test
+- `11_slow_spheres.pov` — 10,000 spheres, reflection/glass stress test
+- landscape, architecture, car, neon city, desert, underwater, space station,
+  still life, crystal, forest
+
+Render all of them with a per-file time limit:
+
+```sh
+python3 -u tools/render_all_scenes.py --timeout 300 --width 640 --height 480
+```
+
+The summary is written to `build_host/scenes/summary.txt`.
+
+Host results (640×480, 1 thread, no AA): all 13 scenes finished in
+**6.2–10.2 s**; no 5-minute timeouts. The 160×120 smoke test on the real
+sgnano hardware took **14.1 s** including parse, render, checkpoint writes,
+and PNG encoding.
+
+## Repository layout
+
+```
+app/sgnano_app.c/.h          common checkpoint, PNG, progress, FB interface
+app/sgx/povray_sgx.cpp       SGX frontend (VFE replacement, argument parsing)
+app/sgx/sgnano_app_sgx.c/.h  SGX platform: mode 1/2, block store, fb_lend_spare
+app/sgx/zlib_shim.c          zlib shim for the SGX build
+apps/povprobe/               hardware probe
+apps/threadtest/ apps/exctest/  SGX thread/exception smoke tests
+compat/                      host Boost compatibility
+compat_sgx/                  Boost.Thread over sgnano tasks
+platform/host/               host config
+platform/sgx/                SGX ABI adapter (official header + host stub)
+platform/sgx_pov/            POV-Ray platform config for SGX
+third_party/povray/          POV-Ray 3.7.0.10 (AGPL, local patches)
+third_party/sgnano/          vendored MIT SGX SDK (ABI 5.11)
+third_party/boost/           Boost 1.62 headers (Boost License)
+third_party/miniz/           miniz 3.1.2 (MIT)
+tests/scenes/                13 test scenes
+tools/                       host runner, hardware probe, scene runner
+```
+
+## Documentation
+
+- [`docs/BUILD.md`](docs/BUILD.md) — detailed host/SGX build
+- [`docs/SGX_STUB.md`](docs/SGX_STUB.md) — SGX platform, ABI 5.11, checkpoint
+- [`docs/HW_PROBE.md`](docs/HW_PROBE.md) — real-hardware probe and drive notes
+- [`docs/TESTING.md`](docs/TESTING.md) — tests, checkpoint format, scene results
+- [`docs/UPSTREAM_CHANGES.md`](docs/UPSTREAM_CHANGES.md) — POV-Ray changes
+
+The detailed documents are in Japanese. The vendored SGX SDK is documented in
+[`third_party/sgnano/README.md`](third_party/sgnano/README.md).
+
+## Limitations
+
+- One render thread; antialiasing is disabled so that line checkpoints are
+  deterministic. `+WT1 -A` are forced.
+- The SGX image is ~1.52MB and needs enough PSRAM for the program, the FB
+  pages, and the POV-Ray threads (128KB stack each).
+- POV-Ray's own file output is disabled (`-F`); the frontend writes the PNG
+  through `sgnano_app`. Scene includes must be next to the scene or in the
+  POV-Ray library path.
+- Animation and some advanced features have not been tested on hardware.
+- The checkpoint is line-based; changing the scene, size, block size, or
+  options invalidates it.
+- On the real device, USB drive letters can move after a host-stack restart.
+  Use the path shown by the filer / `DRIVES`.
+
+## License
+
+The application is **AGPL-3.0-or-later** because it is based on POV-Ray 3.7.
+See [`LICENSE`](LICENSE) and [`NOTICE`](NOTICE).
+
+- POV-Ray 3.7.0.10: AGPL-3.0-or-later (`third_party/povray/COPYING`)
+- sgnano SGX SDK: MIT (`third_party/sgnano/LICENSE`, ABI 5.11 snapshot)
+- Boost 1.62 headers: Boost Software License 1.0
+  (`third_party/boost/LICENSE_1_0.txt`)
+- miniz 3.1.2: MIT (`third_party/miniz/LICENSE`)
+
+When distributing a `povray.sgx` binary, provide the corresponding source,
+the AGPL text, and the notices above. Local POV-Ray changes are documented in
+`docs/UPSTREAM_CHANGES.md` and provided as patches in
+`third_party/povray/patches/`.
+
+## Credits
+
+- POV-Ray 3.7 by the POV-Ray team (Persistence of Vision Raytracer Pty. Ltd.
+  and contributors).
+- sgnano by the sgnano project (MIT SDK and hardware).
+- Boost and miniz by their respective authors.
+
+---
+
+日本語の概要は [`README.ja.md`](README.ja.md) を参照してください。

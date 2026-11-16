@@ -21,11 +21,39 @@ jobs:
       - name: Build
         run: ninja -C build_host
 
-      - name: SGX checkpoint stub test
-        run: ./build_host/test_sgx_checkpoint
+      - name: SGX checkpoint stub tests
+        run: |
+          ./build_host/test_sgx_checkpoint
+          ./build_host/test_sgx_ckp_faults
 
       - name: Render a smoke-test scene
         run: |
           python3 tools/run_host.py tests/scenes/simple.pov build_host/test.png \
             --width 80 --height 60
           test -s build_host/test.png
+
+  sgx-build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build gcc-arm-none-eabi python3
+
+      - name: Configure
+        run: |
+          cmake -S . -B build_sgx -G Ninja \
+            -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+            -DSGNANO_BUILD_SGX_PROBE=ON \
+            -DSGNANO_BUILD_SGX_POVRAY=ON
+
+      - name: Build SGX targets
+        run: ninja -C build_sgx povprobe povray
+
+      - name: Check images
+        run: |
+          test -s build_sgx/sgx/povprobe.sgx
+          test -s build_sgx/sgx/povray.sgx
+          ls -l build_sgx/sgx/*.sgx

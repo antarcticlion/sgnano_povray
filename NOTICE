@@ -8,27 +8,32 @@ The application code in this repository is distributed under the **GNU Affero
 General Public License, version 3 or later** (AGPL-3.0-or-later), because it is
 built on POV-Ray 3.7. See `LICENSE`.
 
-Exception: `include/sgx4_api.h` is a proposed SGX ABI header intended to be
-compatible with the sgnano SDK. It is licensed under the **MIT License**
-(`LICENSES/MIT.txt`) so that the sgnano project can adopt it.
+Exception: `include/sgx4_api.h` is an early SGX ABI design proposal. It is
+licensed under the **MIT License** (`LICENSES/MIT.txt`) so that the sgnano
+project can adopt it. It is historical and is not used by the current build;
+the authoritative ABI header is the vendored SDK header
+`third_party/sgnano/sdk/sgx/include/sgx_api.h`.
 
 ## Third-party components
 
 - **POV-Ray 3.7.0.10**  
   Copyright 1991-2013 Persistence of Vision Raytracer Pty. Ltd.  
   AGPL-3.0-or-later. See `third_party/povray/COPYING`.
-  Local modifications are described in `docs/UPSTREAM_CHANGES.md`.
+  Local modifications are described in `docs/UPSTREAM_CHANGES.md` and provided
+  as patches in `third_party/povray/patches/`.
+
+- **sgnano SGX SDK (ABI 5.11)**
+  Copyright the sgnano project.
+  MIT License. See `third_party/sgnano/LICENSE`.
+  This repository vendors the SDK snapshot from 2026-11-16 under
+  `third_party/sgnano/sdk/sgx/` (CMake helpers, crt0, libc, linker scripts,
+  `sgx_link.py`, and the official ABI 5.11 headers). It does **not** include
+  the sgnano firmware. Checksums are in `third_party/sgnano/SHA256SUMS`.
 
 - **Boost 1.62.0 headers**  
   Copyright the Boost authors.  
   Boost Software License 1.0. See `third_party/boost/LICENSE_1_0.txt`.
   The headers are vendored unchanged.
-
-- **sgnano SGX SDK / ABI 4.0 header**  
-  The sgnano project's SGX ABI and SDK are MIT-licensed. This repository
-  contains the official ABI 4.0 header snapshot in
-  `third_party/sgnano/sgx_api.h` and does not include sgnano firmware code.
-  `include/sgx4_api.h` is the earlier design proposal and is superseded.
 
 - **miniz 3.1.2**  
   Copyright 2013-2014 RAD Game Tools and Valve Software,

@@ -31,9 +31,9 @@ python3 tools/run_host.py tests/scenes/simple.pov build_host/test.png \
 
 ## テストシーン
 
-`tests/scenes/` に 12 本ある。`00_fast_sphere.pov` はスモークテスト、
-`11_slow_spheres.pov` は 10,000 球の重いテスト。一覧は
-`tests/scenes/README.md`。
+`tests/scenes/` に 13 本ある（番号付き 12 本と `simple.pov`）。
+`00_fast_sphere.pov` はスモークテスト、`11_slow_spheres.pov` は 10,000 球の
+重いテスト。一覧は `tests/scenes/README.md`。
 
 ```sh
 python3 tools/run_host.py tests/scenes/03_car.pov build_host/car.png \
@@ -105,6 +105,36 @@ sgnano（RP2350、clk_sys 302.4MHz、PSRAM 8MB）で、`C:/POVTEST/bin/povray.sg
 - 実機で動くまでに直したもの（`CHANGELOG.md` の 2026-11-07）: PSRAM で不可分の命令が効かない、nano の C++ に巻き戻しの表が無い、
   `sscanf` の小数、乱数の表（256KB ずつ）、SDK の malloc（鍵・小さい確保の速い道）、スレッドの優先度、FB を出すと 20 倍遅い（モード 7 の縮小）、
   描くスレッドのスタック（128KB。64KB では 02 であふれた）。ファーム側は sgnano の `docs/notes/system.md` の 2026-11-07 の節。
+
+### 実機（SGX 版、ABI 5.11、2026-11-16）
+
+sgnano（RP2350、PSRAM 8MB）で、ABI 5.11 の `povray.sgx` を `RBRUN` から
+1 シーンずつ実行した。320×240、1 スレッド、AA なし、`+BS4`。5 分上限は
+`tools/render_all_sgx.py --timeout 300`。時間は RBRUN から終了までの合計と、
+`POVRAY RESULT` の描画秒。
+
+| シーン | 合計 | 描画 | 結果 |
+|---|---:|---:|---|
+| 00_fast_sphere | 56.5 s | 49.9 s | 完走 |
+| 01_geo_landscape | 132.5 s | 126.5 s | 完走 |
+| 02_arch_perspective | 283.9 s | 278.8 s | 完走 |
+| 03_car | 146.8 s | 142.0 s | 完走 |
+| 04_city_night | 92.1 s | 85.6 s | 完走 |
+| 05_desert_monolith | 87.1 s | 83.3 s | 完走 |
+| 06_underwater | 79.3 s | 74.7 s | 完走 |
+| 07_space_station | 71.7 s | 66.6 s | 完走 |
+| 08_fruit_still_life | 127.7 s | 121.2 s | 完走 |
+| 09_abstract_crystal | 204.4 s | 198.5 s | 完走 |
+| 10_forest_path | 70.7 s | 65.5 s | 完走 |
+| simple | 62.4 s | 56.2 s | 完走 |
+| 11_slow_spheres | 321.3 s | — | 5 分で打ち切り（解析中の state 5、ヒープ残り約 79KB） |
+
+- 640×480 の `00_fast_sphere` は **199.8 秒**（描画 193.4 秒）で完走（PNG あり）。
+  この PNG もホスト描画を RGB555 に丸めたものと最大 9/255 の差。
+- 完走した 12 枚の PNG は 320×240。ホスト版の同じシーンを RGB555 に
+  丸めた画像と比べ、チャネル差の最大は 9/255、平均は 0.14〜0.58。
+- `11_slow_spheres` は 10,000 球の解析が PSRAM に収まらない（2026-11-07 の
+  640×480 でも同じ）。チェックポイントは残るが、5 分以内の表示は不可。
 
 ## チェックポイント／再開のテスト
 

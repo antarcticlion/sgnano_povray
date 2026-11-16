@@ -78,29 +78,41 @@ PNG は miniz の deflate（レベル 9）で可逆圧縮する。無圧縮で�
 
 ## ターゲット（SGX）
 
-POV-Ray 本体の SGX フロントエンドはまだだが、アプリ層を実機で確かめる
-`povprobe.sgx` がある。
+sgnano の SGX ABI 5.11 向けに、2 つの `.sgx` をビルドできる。
+
+- `povray.sgx` — POV-Ray 本体
+- `povprobe.sgx` — 実機確認用の小さなテスト
+
+SDK は `third_party/sgnano/sdk/sgx/` に同梱してある（MIT）。sgnano の
+別チェックアウトは要らない。別の SDK を使うときは
+`-DSGNANO_SGX_SDK_DIR=...` で差し替える。
 
 ```sh
 cmake -S . -B build_sgx -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+  -DSGNANO_BUILD_SGX_POVRAY=ON \
   -DSGNANO_BUILD_SGX_PROBE=ON
-ninja -C build_sgx povprobe
+ninja -C build_sgx povray povprobe
 ```
 
-`build_sgx/sgx/povprobe.sgx` を実機の `B:/POVTEST` などへ置き、
+できるもの:
 
-```sh
-RBRUN B:/POVTEST/povprobe.sgx	B:/POVTEST	fresh	120
-RBRUN B:/POVTEST/povprobe.sgx	B:/POVTEST	resume
-RBRUN B:/POVTEST/povprobe.sgx	B:/POVTEST	fresh
+- `build_sgx/sgx/povray.sgx` — POV-Ray 3.7（約 1.58MB、再配置込み）
+- `build_sgx/sgx/povprobe.sgx` — ハードウェアプローブ
+
+実機では `povray.sgx` とシーンを USB へ置いて `RBRUN` で走らせる:
+
+```text
+RBRUN B:/POVTEST/povray.sgx	B:/POVTEST/scenes/00_fast_sphere.pov	+W160	+H120	-fresh
 ```
 
-または `python3 tools/hw_probe.py`（3 パス＋PNG/生データ照合を自動化）。
+`povprobe.sgx` の 3 パス（fresh → resume → fresh）と PNG/生データ照合は
+`SGNANO_ROOT=$HOME/Project/sgnano python3 tools/hw_probe.py` で自動化できる
+（`SGNANO_ROOT` は ZMODEM ヘルパー `scripts/zm.py` のためだけに要る）。
 ドライブ文字は USB の再接続で変わるため、スクリプトは毎回 exFAT/NTFS の
 `POVTEST` を探し直す。詳しくは [`HW_PROBE.md`](HW_PROBE.md)。
 
-**ビルドの注意**: SDK の `sgx_libc.c` の `calloc` は GCC の
+**ビルドの注意**: 以前の SDK では `sgx_libc.c` の `calloc` が GCC の
 `malloc`＋`memset(0)` → `calloc` 変換で無限再帰にコンパイルされることが
-ある。`sgx_add_program(... OPTIONS -fno-builtin)` で回避している
-（`-fno-builtin-calloc` だけでは足りない）。
+あった。ABI 4.1 以降の SDK は `memset` を関数ポインタ越しに呼ぶ形へ直って
+いるため、このリポジトリでは `-fno-builtin` を付けていない。

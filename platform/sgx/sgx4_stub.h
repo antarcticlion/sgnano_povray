@@ -1,5 +1,6 @@
-// sgnano 本体の ABI 4.0（2026-11-06）のうち、このアプリが使う口だけを持つスタブ。
-// 正式な型は third_party/sgnano/sgx_api.h。ファームの sgx_api_t と同じ並び・同じ型にそろえる。
+// sgnano 本体の ABI のうち、このアプリが使う口だけを持つスタブ。
+// 正式な型は third_party/sgnano/sdk/sgx/include/sgx_api.h（ABI 5.11）。
+// ファームの sgx_api_t と同じ並び・同じ型にそろえる（4.x の口は 5.11 でも同じ）。
 //
 // ホスト試験では sgx4_stub_host.c がこの小さな表を作る。
 // 実機（SGNANO_SGX_OFFICIAL_ABI）では SDK の sgx_api_t をそのまま使い、sgx4 を
@@ -59,7 +60,7 @@ typedef struct {
     int      (*remove)(const char *path);
     int      (*write_file)(const char *path, const void *src, uint32_t len);
 
-    // ABI 4.0 のブロックストア。正式な sgx_api_t と同じ型。
+    // ブロックストア（ABI 4.0 で追加、5.11 でも同じ）。正式な sgx_api_t と同じ型。
     int      (*store_open)(const sgx_store_config_t *cfg);
     int      (*store_close)(int id);
     void    *(*store_get)(int id, uint32_t block);
@@ -69,7 +70,7 @@ typedef struct {
     int      (*store_stats)(int id, sgx_store_stats_t *out);
     int      (*store_error)(int id);
 
-    // ABI 4.0: FB の余りのページ（mode 2 で keep 以外の 3 ページ = 約 1.8MB）。
+    // FB の余りのページ（mode 2 で keep 以外の 3 ページ = 約 1.8MB）。
     unsigned (*fb_lend_spare)(int keep, void **pages, unsigned max, uint32_t *page_bytes);
 } sgx4_stub_api_t;
 

@@ -7,20 +7,33 @@ See [`docs/BUILD.md`](docs/BUILD.md). Before sending a change, run:
 ```sh
 cmake -S . -B build_host -G Ninja -DCMAKE_BUILD_TYPE=Release
 ninja -C build_host
-python3 tools/run_host.py tests/scenes/simple.pov build_host/test.ppm \
+python3 tools/run_host.py tests/scenes/simple.pov build_host/test.png \
   --width 160 --height 120
 ```
 
 The checkpoint/resume test is described in [`docs/TESTING.md`](docs/TESTING.md).
+For the SGX targets:
+
+```sh
+cmake -S . -B build_sgx -G Ninja \
+  -DCMAKE_TOOLCHAIN_FILE=cmake/arm-none-eabi.cmake \
+  -DSGNANO_BUILD_SGX_POVRAY=ON -DSGNANO_BUILD_SGX_PROBE=ON
+ninja -C build_sgx povray povprobe
+```
 
 ## Vendored upstream code
 
-`third_party/povray/` is POV-Ray 3.7.0.10 and `third_party/boost/` is Boost
-1.62.0. Do not change vendored files without also:
+`third_party/povray/` is POV-Ray 3.7.0.10, `third_party/boost/` is Boost
+1.62.0, and `third_party/sgnano/sdk/sgx/` is the MIT sgnano SGX SDK snapshot
+(ABI 5.11). Do not change vendored files without also:
 
 1. Adding an entry to [`docs/UPSTREAM_CHANGES.md`](docs/UPSTREAM_CHANGES.md).
 2. Adding or updating a patch in `third_party/povray/patches/`.
 3. Rebuilding and running the host smoke test.
+
+For `third_party/sgnano/`, update from the sgnano tree, regenerate
+`third_party/sgnano/SHA256SUMS`, and verify `ninja -C build_sgx povray
+povprobe`.
 
 Boost headers are unmodified. If you need a Boost change, add a compatibility
 header under `compat/` instead of editing `third_party/boost/`.

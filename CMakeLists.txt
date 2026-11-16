@@ -30,7 +30,7 @@ target_include_directories(povray_host PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/platform/host"
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/boost"
     "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz"
-    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano/sdk/sgx/include"
     "${POVRAY_DIR}/source"
     "${POVRAY_DIR}/source/backend"
     "${POVRAY_DIR}/source/base"
@@ -71,7 +71,7 @@ if(NOT CMAKE_CROSSCOMPILING)
         "${CMAKE_CURRENT_SOURCE_DIR}"
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/sgx"
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano/sdk/sgx/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz"
     )
     target_link_libraries(test_sgx_checkpoint PRIVATE m)
@@ -88,7 +88,7 @@ if(NOT CMAKE_CROSSCOMPILING)
         "${CMAKE_CURRENT_SOURCE_DIR}"
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/sgx"
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano/sdk/sgx/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz"
     )
     target_link_libraries(test_sgx_ckp_faults PRIVATE m)
@@ -100,7 +100,7 @@ endif()
 #     -DSGNANO_BUILD_SGX_PROBE=ON
 option(SGNANO_BUILD_SGX_PROBE "Build povprobe.sgx for a real sgnano device" OFF)
 if(SGNANO_BUILD_SGX_PROBE)
-    set(SGNANO_SGX_SDK_DIR "/home/antarcticlion/Project/sgnano/sdk/sgx" CACHE PATH "sgnano SGX SDK directory")
+    set(SGNANO_SGX_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano/sdk/sgx" CACHE PATH "sgnano SGX SDK directory")
     if(NOT EXISTS "${SGNANO_SGX_SDK_DIR}/sgx.cmake")
         message(FATAL_ERROR "SGNANO_SGX_SDK_DIR does not contain sgx.cmake: ${SGNANO_SGX_SDK_DIR}")
     endif()
@@ -128,7 +128,10 @@ endif()
 # スレッドは compat_sgx/boost/thread.hpp（M33BEATOS のタスク）、VFE のプラットフォームは platform/sgx_pov
 option(SGNANO_BUILD_SGX_POVRAY "Build povray.sgx for a real sgnano device" OFF)
 if(SGNANO_BUILD_SGX_POVRAY)
-    set(SGNANO_SGX_SDK_DIR "/home/antarcticlion/Project/sgnano/sdk/sgx" CACHE PATH "sgnano SGX SDK directory")
+    set(SGNANO_SGX_SDK_DIR "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano/sdk/sgx" CACHE PATH "sgnano SGX SDK directory")
+    if(NOT EXISTS "${SGNANO_SGX_SDK_DIR}/sgx.cmake")
+        message(FATAL_ERROR "SGNANO_SGX_SDK_DIR does not contain sgx.cmake: ${SGNANO_SGX_SDK_DIR}")
+    endif()
     include("${SGNANO_SGX_SDK_DIR}/sgx.cmake")
     set(_vfe_sgx
         ${POVRAY_DIR}/vfe/vfesession.cpp
@@ -216,7 +219,7 @@ if(SGNANO_BUILD_ARM_SIZE)
         "${CMAKE_CURRENT_SOURCE_DIR}"
         "${CMAKE_CURRENT_SOURCE_DIR}/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/platform/sgx"
-        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano"
+        "${CMAKE_CURRENT_SOURCE_DIR}/third_party/sgnano/sdk/sgx/include"
         "${CMAKE_CURRENT_SOURCE_DIR}/third_party/miniz"
     )
     target_compile_options(sgnano_arm_app PRIVATE -Os -ffunction-sections -fdata-sections)

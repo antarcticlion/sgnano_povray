@@ -1,63 +1,20 @@
 # 実機 SGX プローブ（povprobe）
 
 POV-Ray 本体を載せる前に、実機で次の層を確かめるための小さなアプリです。
+現在は ABI 5.11 で動きます。
 
 - mode 2（テキスト＋640×480 RGB555）と 1 ページ FB
-- ABI 4.0 の `fb_lend_spare`（余り 3 ページ = 1,843,200 B）
-- ABI 4.0 のブロックストア `store_*` による 1 ライン単位のチェックポイント
+- `fb_lend_spare`（余り 3 ページ = 1,843,200 B）
+- ブロックストア `store_*` による 1 ライン単位のチェックポイント
 - 停止 → 再開 → 完成（再開後の絵が最初から描いた絵と一致すること）
 - 可逆 PNG（miniz deflate level 9）と RGB555 生データの一致
 - 20GB 以上の USB ドライブ（38GB の HDD）での読み書き
 - 描画中の進捗表示（テキスト面のバー＋UART の `progress` 行）
 
-## ビルド上の注意（`calloc` の無限再帰）
-
-【訂正 2026-11-06】sgnano の SDK（ABI 4.1）で直したので、`-fno-builtin` は外した。下は記録として残す。
-
-sgnano SDK の `sgx_libc.c` の
-
-```c
-void *calloc(size_t a, size_t b) {
-    void *p = malloc(a * b);
-    if (p) memset(p, 0, a * b);
-    return p;
-}
-```
-
-は、GCC の「`malloc`＋`memset(0)` → `calloc`」変換により、**`calloc` 自身を
-末尾呼び出しするコード**にコンパイルされることがあります（実機で GDB により
-確認）。そのため、`calloc` を呼ぶアプリはそこで無限再帰します。
-
-`povprobe` のビルドでは `-fno-builtin` を付けて回避しています
-（`CMakeLists.txt` の `sgx_add_program(... OPTIONS -fno-builtin)`）。
-`-fno-builtin-calloc` だけでは止まりません。SDK 側でも `sgx_libc.c` に
-`-fno-builtin` を付けるのが本筋です。
-
-## 実機で分かったこと（2026-11-06）
-
-- 38GB HDD の exFAT（C:）で `storetest` は 47/47 通った。4KB×64 の
-  作成は 869ms、64KB×32（2MB）は 3289ms。
-- 【訂正 2026-11-06】下の「mode 2 で止まる」は、`store_open` の直前に `sgnano_app_init` が呼ぶ
-  `calloc` の無限再帰だった（ABI 4.1 の SDK で直った）。いまの `povprobe` は mode 2 のまま開いて PASS。
-  ページの並べ替えも、4.1 のファームが番地の小さい順に返すので外した。
-- **mode 2 で FB を出したまま `store_open` すると、実機で止まった**
-  （`store: opening ...` のまま 4 分以上）。同じ大きさの普通の
-  `write_file` は mode 2 でも 1.2 秒で通る。`create_zero` を避けて
-  既存ファイルを開いても止まったため、`store_open` の
-  `rbfs_ra_open_psram`（exFAT の置き場の一覧）側と見ている。
-- 対策: **ストアを開く間だけ mode 1（テキスト）にし、開いてから
-  mode 2 へ入る**。再開するラインは `sgnano_app_restore_fb()` で
-  FB へ戻す。`storetest` が mode 1 で通るのと同じ条件。
-- チェックポイントのファイルは `write_file` で先に 655,360 B
-  （64KB の倍数）作る。`store_open` の CREATE（0 埋め）を通さない。
-- `fb_lend_spare` はページを高い番地から返す（FB1, FB2, FB3）。
-  番地の順に並べ替えて、連続した 1.8MB として PNG の作業場に使う。
-
 ## ビルド
 
-sgnano の SDK の `sgx.cmake` を使います。既定の SDK の場所は
-`/home/antarcticlion/Project/sgnano/sdk/sgx` です。違う場所なら
-`-DSGNANO_SGX_SDK_DIR=...` を渡してください。
+SDK は `third_party/sgnano/sdk/sgx/` に同梱してあります（MIT、ABI 5.11）。
+sgnano の別チェックアウトは要りません。
 
 ```sh
 cmake -S . -B build_sgx -G Ninja \
@@ -66,14 +23,17 @@ cmake -S . -B build_sgx -G Ninja \
 ninja -C build_sgx povprobe
 ```
 
-できるもの: `build_sgx/sgx/povprobe.sgx`（約 30KB）。
+できるもの: `build_sgx/sgx/povprobe.sgx`（約 38KB）。
 
 ## 実機へ置く
 
+`scripts/zm.py` は sgnano リポジトリにあります。`SGNANO_ROOT` をその
+チェックアウトに合わせてください。
+
 ```sh
-cd ~/Project/sgnano
-python3 scripts/zm.py put --remote-dir C:/POVTEST \
-  ~/Project/sgnano_povray/build_sgx/sgx/povprobe.sgx
+cd "$SGNANO_ROOT"
+python3 scripts/zm.py put --remote-dir B:/POVTEST \
+  "$OLDPWD/build_sgx/sgx/povprobe.sgx"
 ```
 
 **ドライブ文字は USB の再接続で変わります。** 実際に、USB ホストの
@@ -84,14 +44,14 @@ python3 scripts/zm.py put --remote-dir C:/POVTEST \
 ## 走らせる
 
 ```sh
-RBRUN C:/POVTEST/povprobe.sgx	C:/POVTEST	fresh	120
+RBRUN B:/POVTEST/povprobe.sgx	B:/POVTEST	fresh	120
 ```
 
 引数:
 
 | 引数 | 意味 |
 |---|---|
-| `DIR` | 書き込み先（例 `C:/POVTEST`） |
+| `DIR` | 書き込み先（例 `B:/POVTEST`） |
 | `fresh` | チェックポイントを消して最初から |
 | `resume` | 既存のチェックポイントから続ける |
 | 行数 | その数だけ新しく描いたら止める（省略時は最後まで） |
@@ -104,7 +64,7 @@ RBRUN C:/POVTEST/povprobe.sgx	C:/POVTEST	fresh	120
 ## 自動試験
 
 ```sh
-python3 tools/hw_probe.py
+SGNANO_ROOT=$HOME/Project/sgnano python3 tools/hw_probe.py
 ```
 
 このスクリプトは次を行います。
@@ -147,3 +107,32 @@ UART には 16 行ごとに `progress 128/480 (26.6%) 1234 ms` を出します�
   `DRIVES` を確認してからやり直してください。
 - 最初の `store_open` が遅い: 38GB HDD の exFAT で 2MB の作成に約 3.3 秒
   かかります（`storetest` の実測）。618KB のチェックポイントは約 1 秒です。
+- ストアを開く前に mode 2 の FB を出さない: POV-Ray 側は描画中 mode 7
+  preview、最後だけ mode 2 にしています。`povprobe` も同じ順序です。
+
+## 記録（2026-11-06 の調査）
+
+### `calloc` の無限再帰
+
+以前の SDK の `sgx_libc.c` は
+
+```c
+void *calloc(size_t a, size_t b) {
+    void *p = malloc(a * b);
+    if (p) memset(p, 0, a * b);
+    return p;
+}
+```
+
+で、GCC の「`malloc`＋`memset(0)` → `calloc`」変換により `calloc` 自身を
+末尾呼び出しするコードにコンパイルされることがありました。ABI 4.1 以降の
+SDK は `memset` を関数ポインタ越しに呼ぶ形へ直っているため、いまは
+`-fno-builtin` を付けていません。
+
+### store_open と mode 2
+
+mode 2 の FB を出したまま `store_open` すると止まる、という現象が
+2026-11-06 にありました。対策として、ストアを開く間は mode 1（または
+mode 7）にし、開いてから mode 2 へ入る順序にしています。チェックポイントの
+ファイルは `write_file` で先に 64KB の倍数の大きさで作り、`store_open` の
+CREATE（0 埋め）を通しません。

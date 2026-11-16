@@ -2,18 +2,22 @@
 
 2026-11-06 / sgnano 側で決めた正式な ABI 4.0。素案 `SPEC_sgx4_overlay_store.md` を読んで決めたもの。
 
-> **sgnano_povray 側の取り込みメモ（2026-11-06）**: この文書の型と関数の表に合わせ、
-> `third_party/sgnano/sgx_api.h` に公式ヘッダのスナップショットを置いた。
+> **歴史的な文書（ABI 4.0、2026-11-06）。** 現在の ABI は **5.11**（2026-11-16）で、
+> 正本は同梱 SDK の `third_party/sgnano/sdk/sgx/include/sgx_api.h`。この文書は
+> ブロックストアと `fb_lend_spare` の設計理由を残すために置いてある。
+
+> **sgnano_povray 側の取り込みメモ（2026-11-06 当時）**: この文書の型と関数の表に合わせ、
+> `third_party/sgnano/sdk/sgx/include/sgx_api.h` に公式ヘッダのスナップショットを置いた。
 > `platform/sgx/sgx4_stub.h` と `app/sgx/sgnano_app_sgx.c` は公式の型・シグネチャ
 > （`sgx_store_config_t`、`SGX_STORE_*`、`SGX_EBUSY`、`set_mode` の戻り値など）に更新済み。
 > **追記**: ABI 4.0 に `fb_lend_spare`（mode 2 で余りの 3 ページ = 約 1.8MB を借りる）
 > が追加された。アプリは mode 2 のページ 0 を残して 3 ページを借り、PNG の RGB
 > 作業場と将来の POV-Ray ヒープに使う。実機テストは sgnano 本体が空いてから行う。
 
-- **正本（型と関数の表）**: `~/Project/sgnano/sdk/sgx/include/sgx_api.h`（MIT）。このリポジトリに写しは置かない（写すと食い違うので、SDK をそのまま使う）
-- **説明**: `~/Project/sgnano/docs/sgx_abi.md` の §5.16（ブロックストア）・§3（読み込み）・§7（版）・§9（素案からの決め方）
-- **組み方**: sgnano_tracker と同じく `SGX_SDK_DIR` に `../sgnano/sdk/sgx` を置き、`include(${SGX_SDK_DIR}/sgx.cmake)` と `sgx_add_program(...)`
-- **見本と試し**: `~/Project/sgnano/apps/abitest/storetest.c`（ブロックストアの使い方と誤りの返し方を全部）
+- **現行の正本（型と関数の表）**: `third_party/sgnano/sdk/sgx/include/sgx_api.h`（MIT、ABI 5.11 のスナップショット。この文書が扱う 4.0 当時は sgnano の `sdk/sgx/include/sgx_api.h`）
+- **説明**: sgnano リポジトリの `docs/sgx_abi.md` の §5.16（ブロックストア）・§3（読み込み）・§7（版）・§9（素案からの決め方）
+- **組み方**: `SGNANO_SGX_SDK_DIR` に `third_party/sgnano/sdk/sgx` を置き、`include(${SGNANO_SGX_SDK_DIR}/sgx.cmake)` と `sgx_add_program(...)`
+- **見本と試し**: sgnano リポジトリの `apps/abitest/storetest.c`（ブロックストアの使い方と誤りの返し方を全部）
 
 ---
 
@@ -143,8 +147,8 @@ POV-Ray の見積もり（像 約 2MB・スタック 192KB・ヒープ・スト�
 ABI 4.0 には入れていないが、**SDK の部品**として使える（ファームを変えずに、4.0 の `ra_read`・`psram_alloc` だけで動く）。
 sgnano_povray の実機テストが済んだら、sgnano 側で ABI に組み込む予定。
 
-- 部品: `~/Project/sgnano/sdk/sgx/include/sgx_overlay.h`・`sgx_overlay.c`・`sgx_ovl.ld`・`sgx_ovl_pack.py`、CMake は `sgx_add_overlay_module` / `sgx_add_overlay_pack`（`sgx.cmake`）
-- 説明: `~/Project/sgnano/docs/sgx_abi.md` の §10。見本: `~/Project/sgnano/apps/ovltest`
+- 部品: sgnano リポジトリの `sdk/sgx/include/sgx_overlay.h`・`sgx_overlay.c`・`sgx_ovl.ld`・`sgx_ovl_pack.py`、CMake は `sgx_add_overlay_module` / `sgx_add_overlay_pack`（`sgx.cmake`）
+- 説明: sgnano リポジトリの `docs/sgx_abi.md` の §10。見本: `apps/ovltest`
 - 形は素案の §4.3〜4.4 とほぼ同じ: モジュールは番地 0 に結び、`init(ctx, iface, size)` が関数の表を埋める。常駐の機能は `ctx->host`。替えたら前の番地はすべて無効（pin する）。
   素案との違い: スロットの数・大きさは常駐が `sgx_ovl_add_slot` で決める（パックには持たない）。名前で引ける（`sgx_ovl_find`）。`.init_array`・例外の表は持てない（C++ の静的な初期化はモジュールに置けない）
 - 確かめ: QEMU（Cortex-M33）で約 1MB のモジュールを 128KB x 2 のスロットへ 300 回入れ替え、すべて一致（`scripts/test_overlay.py`）。**実機は未確認**

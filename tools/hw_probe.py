@@ -21,11 +21,14 @@ import sys
 import time
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SGNANO = os.environ.get("SGNANO_ROOT", os.path.expanduser("~/Project/sgnano"))
+# The ZMODEM upload/download helper lives in the sgnano repository.  The
+# public sgnano_povray tree does not vendor it, so point SGNANO_ROOT at a
+# sgnano checkout when you run the hardware probe.
+SGNANO = os.environ.get("SGNANO_ROOT", "")
 PORT = os.environ.get("SGNANO_TTY", "/dev/ttyACM0")
 BAUD = int(os.environ.get("SGNANO_BAUD", "921600"))
 PROBE = os.path.join(ROOT, "build_sgx", "sgx", "povprobe.sgx")
-ZM = os.path.join(SGNANO, "scripts", "zm.py")
+ZM = os.path.join(SGNANO, "scripts", "zm.py") if SGNANO else ""
 CHECK = os.path.join(ROOT, "tools", "check_probe_output.py")
 
 
@@ -117,12 +120,22 @@ def run_phase(remote_prog, args, timeout):
         raise TimeoutError("probe did not finish in %d s: %s" % (timeout, buf.decode("utf-8", "replace")[-800:]))
 
 
+def _require_zm():
+    if not SGNANO or not os.path.exists(ZM):
+        raise SystemExit(
+            "SGNANO_ROOT is not set to a sgnano checkout with scripts/zm.py.\n"
+            "Example: SGNANO_ROOT=$HOME/Project/sgnano python3 tools/hw_probe.py"
+        )
+
+
 def zm_put(remote_dir, local_file):
+    _require_zm()
     return subprocess.run([sys.executable, ZM, "put", "--remote-dir", remote_dir, local_file],
                           check=True, cwd=SGNANO).returncode
 
 
 def zm_get(remote_file, outdir):
+    _require_zm()
     return subprocess.run([sys.executable, ZM, "get", "--remote-file", remote_file, outdir],
                           check=True, cwd=SGNANO).returncode
 

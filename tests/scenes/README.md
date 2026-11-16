@@ -24,6 +24,7 @@ python3 tests/scenes/generate_scenes.py
 | `09_abstract_crystal.pov` | 抽象クリスタル | 透明な結晶、反射床、カラーライト | 中 |
 | `10_forest_path.pov` | 森の小道 | 木、道、蛍、夕方の光 | 中 |
 | `11_slow_spheres.pov` | **低速テスト** | SDL ループで 10,000 球、反射床、ガラス | 非常に重い |
+| `simple.pov` | 最小シーン | 球と平面だけ。スモークテスト用 | 軽 |
 
 ## 使い方
 

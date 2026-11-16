@@ -1,5 +1,5 @@
 // SGX スタブ上で sgnano_app を動かす。
-// 画面は mode 2（テキスト＋RGB555 FB）、チェックポイントは SGX 4.0 の
+// 画面は mode 2（テキスト＋RGB555 FB）、チェックポイントは SGX の
 // ブロックストア（スタブ）に置く。
 #include "app/sgx/sgnano_app_sgx.h"
 
@@ -173,19 +173,37 @@ static void s_scratch_free(void *p)
     if (!spare_contains(p)) free(p);
 }
 
+// The real FB page is always 640x480 RGB555, independent of the render size.
+// Center the image so a 320x240 render is not written with a 320-pixel pitch
+// into a 640-pixel-wide page (which would skew it).  The host stub allocates
+// exactly width x height instead, so it keeps the compact layout.
+#ifdef SGNANO_SGX_OFFICIAL_ABI
+#define SGX_FB_PITCH 640u
+#define SGX_FB_WIDTH 640u
+#define SGX_FB_HEIGHT 480u
+#else
+#define SGX_FB_PITCH g_w
+#define SGX_FB_WIDTH g_w
+#define SGX_FB_HEIGHT g_h
+#endif
+
 static void s_fb_put(uint32_t x, uint32_t y, const uint16_t *pixels, uint32_t n)
 {
+    const uint32_t ox = (SGX_FB_WIDTH - g_w) / 2u;
+    const uint32_t oy = (SGX_FB_HEIGHT - g_h) / 2u;
     if (!g_fb || y >= g_h || x >= g_w) return;
     if (x + n > g_w) n = g_w - x;
-    memcpy(g_fb + (size_t)y * g_w + x, pixels, (size_t)n * 2u);
+    memcpy(g_fb + (size_t)(oy + y) * SGX_FB_PITCH + (ox + x), pixels, (size_t)n * 2u);
     preview_put(x, y, pixels, n);
 }
 
 static void s_fb_get(uint32_t x, uint32_t y, uint16_t *pixels, uint32_t n)
 {
+    const uint32_t ox = (SGX_FB_WIDTH - g_w) / 2u;
+    const uint32_t oy = (SGX_FB_HEIGHT - g_h) / 2u;
     if (!g_fb || y >= g_h || x >= g_w) return;
     if (x + n > g_w) n = g_w - x;
-    memcpy(pixels, g_fb + (size_t)y * g_w + x, (size_t)n * 2u);
+    memcpy(pixels, g_fb + (size_t)(oy + y) * SGX_FB_PITCH + (ox + x), (size_t)n * 2u);
 }
 
 static uint32_t s_now_ms(void) { return sgx4 && sgx4->ms ? sgx4->ms() : 0u; }

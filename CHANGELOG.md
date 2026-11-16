@@ -1,5 +1,34 @@
 # Changelog
 
+## 2026-11-16 — sgnano SGX ABI 5.11, vendored SDK, showcase renders
+
+- Vendored the MIT sgnano SGX SDK snapshot (2026-11-16, **ABI 5.11**) under
+  `third_party/sgnano/sdk/sgx/`: `sgx.cmake`, crt0, libc, linker scripts,
+  `sgx_link.py`, and the official headers. `SGNANO_SGX_SDK_DIR` defaults there,
+  so the SGX build no longer needs a sgnano checkout. `SHA256SUMS` regenerated;
+  the old `sgx_api.h` / `sgx_overlay.h` snapshots were removed.
+- Rebuilt `povray.sgx` against ABI 5.11: image 1,518,744 B + 15,532
+  relocations = 1,580,872 B `.sgx`.
+- Real hardware (ABI 5.11): `00_fast_sphere` at 640×480 in 193.4 s render
+  (199.8 s total; the previous 640×480 result was 291.2 s on ABI 4.3). At 320×240 with a
+  5-minute per-file cap (`tools/render_all_sgx.py`), 12 of the 13 scenes
+  completed in 56.5–283.9 s total; `11_slow_spheres` stops during parsing
+  because its 10,000 spheres exceed the 8MB PSRAM. All 12 finished PNGs match
+  host renders after RGB555 rounding (maximum channel difference 9/255).
+- Fixed the SGX framebuffer stride for renders narrower than 640: `fb_put` /
+  `fb_get` now use the fixed 640-pixel FB pitch and center the image, instead
+  of using the render width as the stride. PNGs and checkpoints were already
+  self-consistent; the final mode-2 display of a 160×120 or 320×240 render was
+  the part that could be skewed.
+- Added `tools/render_all_sgx.py`: runs scenes through `RBRUN`, stores a log per
+  scene, enforces a timeout, sends `RSTOP`, and keeps the checkpoint for resume.
+- Added three showcase scenes (`showcase/crystal_bloom.pov`,
+  `neon_velocity.pov`, `gold_gyroscope.pov`) and 1280×960 antialiased renders in
+  `docs/images/`.
+- README rewritten (English and Japanese). Docs updated for ABI 5.11 and the
+  vendored SDK. CI now builds both the host targets and
+  `povray.sgx` / `povprobe.sgx`.
+
 ## 2026-11-07 — povray.sgx renders on the hardware (sgnano SGX ABI 4.3)
 
 - Stopping with ESC while the FB is on screen (`-fbview`) no longer ends in `std::terminate` (exit 134).

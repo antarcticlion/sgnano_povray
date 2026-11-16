@@ -20,6 +20,10 @@
 /tests/**/*.png
 /tests/**/*.tga
 
+# Python
+__pycache__/
+*.pyc
+
 # editor / OS
 .DS_Store
 *.swp

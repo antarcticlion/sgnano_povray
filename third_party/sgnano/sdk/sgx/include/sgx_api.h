@@ -18,8 +18,29 @@
 #include <stdint.h>
 #include "sgx_overlay.h"                       // オーバーレイの型（ABI 4.1。SDK の部品 sgx_overlay.c と同じもの）
 
-#define SGX_ABI_MAJOR 4
-#define SGX_ABI_MINOR 3                          // 4.3（2026-11-07）: fb_lend_spare をモード 7 でも貸す・貸している間もモード 0・1・2・7 へは替えてよい（表は 4.2 と同じ）
+#define SGX_ABI_MAJOR 5
+#define SGX_ABI_MINOR 11                         // 5.11（2026-11-16）: run_context（ファイラー / シェル / パイプ / 子）と progress_box（ファイラーの上の進み具合の窓）
+                                                 // 5.10（2026-11-15）: 表計算のマクロ macro_run（mruby / MicroPython / SG BASIC の Sheet からセルを読み書き）
+                                                 // 5.9                          // 5.9（2026-11-15）: IME（ime_key / ime_on / ime_composing / ime_draw / ime_state / ime_cancel）、キー SGX_KEY_IME・MENU・GUI_L / R
+                                                 // 5.8（2026-11-15）: set_mode の印 SGX_MODE_NO_LR（表は 5.7 と同じ）
+                                                 // 5.7（2026-11-15）: music_pcm_open / read / close（VGM / VGZ を 44.1kHz の PCM として受け取る）。
+                                                 // 5.6（2026-11-14）: create_file・ra_write（大きさの決まったファイルを作り、その場へ書く）を末尾に足した。
+                                                 // 5.5（2026-11-13）: music_play_mem（メモリの VGM）を末尾に足した。
+// 5.4（2026-11-13）: set_mode の印 SGX_MODE_LR_SMALL（表は 5.3 と同じ）。
+// 5.3                          // 5.3（2026-11-13）: FB のプリミティブ描画（gfx_*、SPEC_gfx.md）を末尾に足した。
+                                                 // 5.2（2026-11-11）: RP2350 内蔵温度センサ（adc_temperature_mc）を末尾に足した。
+                                                 // 5.1（2026-11-11）: ADC（単発読み取りと、ピンを選べる連続取り込み）を末尾に足した。
+                                                 // 5.0（2026-11-11）: GPIO と PIO2（ユーザー開放）を末尾に足した。
+                                                 //      4.x の表の末尾に足しただけなので、ファームは 4.x のプログラムも読み込む（SGX_ABI_COMPAT_MAJOR）
+                                                 // 4.13（2026-11-11）: MIDI（midi_available/read/write/bytes/usb/route）を足した
+                                                 // 4.11（2026-11-10）: bm_flush（キャッシュ付き PSRAM ビットマップの書き戻し）を末尾に足した
+                                                 // 4.10（2026-11-10）: bm_page_back / bm_page_flip（モード 7 のページ切替ダブルバッファ）を末尾に足した
+                                                 // 4.9（2026-11-10）: music_tap（鳴っている PCM の直近）と bm_wrap_clear / bm_wrap_set（ビットマップの横循環）を末尾に足した
+                                                 // 4.8（2026-11-09）: mouse_warp（システムカーソルを画面座標へ動かす）を末尾に足した
+                                                 // 4.7（2026-11-09）: music_render_wav / music_render_progress（VGM/VGZ -> 96kHz/24bit WAV）を末尾に足した
+                                                 // 4.6（2026-11-08）: music_sn_pct（SN76489 の MIX）と music_voice_chip（ボイスごとのチップ）を末尾に足した
+                                                 // 4.5（2026-11-08）: 音楽の MIX 設定（music_settings_reload / music_ssg_pct）を末尾に足した（4.4 = 2026-11-07 音楽の口）
+                                                 // 4.3（2026-11-07）: fb_lend_spare をモード 7 でも貸す・貸している間もモード 0・1・2・7 へは替えてよい（表は 4.2 と同じ）
                                                  // 4.2（2026-11-07）: voice ごとの stream_* を末尾に足した。4.1 以前のプログラムはそのまま動く
                                                  // 4.0（2026-11-06）: ブロックストア（store_*）・FB の余りのページを借りる fb_lend_spare と SGX_EBUSY を足した。表の並びは 3.5 の後ろに足しただけ。
                                                  //      ファームは 3.x のプログラムもそのまま走らせる（SGX_ABI_COMPAT_MAJOR）。4.0 で組んだものは 4.x のファームだけ
@@ -30,7 +51,7 @@
                                                  // 3.0（2026-10-31）: ローレゾのマップを 1 ます 16 ビットに（lr_map は uint16_t *）。表の並びは 2.0 と同じ。2.x で組んだものは読み込まない
                                                  // 2.0（2026-10-31）: 1.x の区切り（ユーザー判断）
 
-#define SGX_ABI_COMPAT_MAJOR 3                   // ファームが読み込むもう 1 つの major（4.0 は 3.x の上位互換）
+#define SGX_ABI_COMPAT_MAJOR 4                   // ファームが読み込むもう 1 つの major（5.0 は 4.x の上位互換）
 
 // ---- 実行ファイルの形 ----
 #define SGX_MAGIC       0x31584753u              // "SGX1"
@@ -80,6 +101,8 @@ typedef struct {
     uint32_t max_wait_us;   // 1 回の get / flush で待った最長
 } sgx_store_stats_t;
 
+struct sgx_macro_sheet;                           // 5.10 の表計算のマクロ（下で定義）
+struct sgx_progress;                              // 5.11 の progress_box（定義は表の後ろ）
 typedef struct sgx_api sgx_api_t;
 typedef int (*sgx_entry_t)(const sgx_api_t *api, int argc, char **argv);
 
@@ -111,6 +134,15 @@ enum {
     SGX_MODE_TEXT_BM8 = 7,      // テキスト（25 行）+ 320x200x8 のビットマップ
 };
 #define SGX_MODE_NO_TEXT 0x100                   // set_mode に足す: テキスト面を開かない・閉じる（SRAM が約 52KB 空く。ビットマップの 2 枚の面などに）
+#define SGX_MODE_BM_CACHED 0x200                 // set_mode に足す（4.11）: モード 7 のビットマップを PSRAM のキャッシュ窓に取る。
+                                                 // 書いたら bm_flush で PSRAM へ書き戻す（テキスト面を開いたまま OGG を鳴らすため）
+#define SGX_MODE_LR_SMALL 0x800                  // set_mode に足す（5.4、2026-11-13）: ローレゾ面はパターン 16KB でよい（VGM の合成の区画を借りずに開ける。
+                                                 // 足さないとき、借りずに開く形は 32KB・16 本以上。テキスト面のあるモード 3〜6 で VGM を鳴らすなら足す）
+#define SGX_MODE_NO_LR 0x1000                    // set_mode に足す（5.8、2026-11-15）: モード 3〜5 でもローレゾ面を開かない（テキスト + FB だけ。
+                                                 // ローレゾ面の 50〜60KB の SRAM をテキスト面などに回す。SGCALC）
+#define SGX_MODE_TEXT_SMALL 0x400                // set_mode に足す（4.12）: モード 7 のテキスト面を 25 行・グリフ 19 行にする。
+                                                 // 約 24KB の SRAM が空き、64KB のビットマップを SRAM に置ける（mplay）。
+                                                 // 4.12 より前のファームはこのビットを無視する（30 行のまま）
 #define SGX_FB_W 640
 #define SGX_FB_H 480
 #define SGX_BM_W 320
@@ -177,6 +209,10 @@ typedef struct {
 #define SGX_KEY_HOME     0x96
 #define SGX_KEY_END      0x97
 #define SGX_KEY_INS      0x98
+#define SGX_KEY_IME      0x99                    // Ctrl+Space（IME のオン・オフ）
+#define SGX_KEY_MENU     0x9B                    // メニューキー（アプリケーションキー）
+#define SGX_KEY_GUI_L    0x9C                    // 左の GUI キー（Windows キー）を押した（5.9、2026-11-15。押した瞬間に 1 回）
+#define SGX_KEY_GUI_R    0x9D                    // 右の GUI キー
 #define SGX_KEY_ENTER    0x0D
 #define SGX_KEY_BS       0x08
 #define SGX_KEY_TAB      0x09
@@ -205,6 +241,7 @@ enum {                                            // 誤り（src/ruby/rbfs.h �
     SGX_OK = 0, SGX_ENOENT, SGX_EEXIST, SGX_EACCES, SGX_ENOTEMPTY, SGX_ENOTDIR, SGX_EISDIR, SGX_EROFS, SGX_ENOSPC, SGX_EIO,
     SGX_ENOTSUP, SGX_EINVAL, SGX_ENOMEM, SGX_ENODEV,
     SGX_EBUSY,                                    // 4.0: 使っている（取り出し中のブロックがある・キャッシュがすべて取り出し中）
+    SGX_EMACRO,                                   // 5.10: マクロの構文・実行の誤り（文は macro_run の err）
 };
 #define SGX_ATTR_RO   0x01u
 #define SGX_ATTR_HID  0x02u
@@ -215,6 +252,49 @@ typedef struct { bool is_dir; uint8_t attr; uint32_t size, mtime, ctime, atime; 
 typedef struct { const char *name; unsigned name_len; bool is_dir; uint8_t attr; uint32_t size, mtime; } sgx_dirent_t;
 typedef void (*sgx_dirent_fn)(const sgx_dirent_t *e, void *user);
 typedef struct sgx_file sgx_file_t;              // 大きいファイルを好きな位置から読む口（ra_*）
+// 音楽の口（ABI 4.4）の様子
+#define SGX_MUSIC_NOCOPY 0x0100u                 // music_play_mem（5.5）: data（PSRAM）を写さずに使う。music_stop（か次の曲）まで返さないこと
+#define SGX_MUSIC_LOOP  0x0001u                  // くり返す（VGM はループの点からいつまでも、ほかは頭から）。無ければ VGM は 2 回まわして終わる
+enum { SGX_MUSIC_IDLE = 0, SGX_MUSIC_PLAYING, SGX_MUSIC_PAUSED, SGX_MUSIC_ENDED, SGX_MUSIC_ERROR };
+enum { SGX_MUSIC_FMT_NONE = 0, SGX_MUSIC_FMT_MP3, SGX_MUSIC_FMT_OGG, SGX_MUSIC_FMT_WAV, SGX_MUSIC_FMT_VGM };
+#define SGX_VGM_YM2203   0x0001u                 // sgx_music_info_t の chips
+#define SGX_VGM_YM2203x2 0x0002u
+#define SGX_VGM_YM2151   0x0004u
+#define SGX_VGM_YM2149   0x0008u
+#define SGX_VGM_OKIM6258 0x0010u
+#define SGX_VGM_SEGAPCM  0x0020u
+#define SGX_VGM_SN76489  0x0040u
+#define SGX_VGM_YM2612   0x0080u
+#define SGX_VGM_NES_APU  0x0100u
+#define SGX_VGM_AY8910   0x0200u
+#define SGX_VGM_YM2610   0x0400u
+#define SGX_VGM_YM2610B  0x0800u
+#define SGX_VGM_MSM5205  0x1000u
+#define SGX_VGM_AY8910x2 0x2000u                 // 2 台目（表示用。チップのビットは 1 台目と同じ扱い）
+#define SGX_VGM_YM2149x2 0x4000u
+#define SGX_VGM_SN76489x2 0x8000u
+#define SGX_VGM_YM2608   0x10000u                // OPNA。ADPCM-A のリズムは同梱の ROM（Tetorica、BSD-3-Clause）
+#define SGX_VGM_YM3812   0x20000u                // OPL2
+#define SGX_VGM_YM3526   0x40000u                // OPL
+#define SGX_VGM_YMF262   0x80000u                // OPL3
+#define SGX_VGM_C140     0x100000u               // Namco C140（PCM）
+#define SGX_VGM_FDS      0x200000u               // ファミコンの FDS（波形 1 声）
+#define SGX_VGM_HUC6280  0x400000u               // PC エンジンの HuC6280（波形 6 声）
+#define SGX_VGM_K051649  0x800000u               // コナミ SCC（波形 5 声）
+#define SGX_VGM_OKIM6295 0x1000000u              // OKI M6295（ADPCM 4 声）
+#define SGX_VGM_K054539  0x2000000u              // コナミ K054539（PCM 8 声）
+#define SGX_VGM_C352     0x4000000u              // Namco C352（PCM 32 声）
+#define SGX_VGM_YM2612x2 0x8000000u              // YM2612 / YM3438 の 2 台目（2026-11-13）
+#define SGX_VGM_RF5C68   0x10000000u             // RF5C68（PCM 8 声。セガ System 18・FM TOWNS）
+#define SGX_VGM_RF5C164  0x20000000u             // RF5C164（PCM 8 声。メガ CD）
+typedef struct {
+    uint8_t  state, format, voices, loops;       // SGX_MUSIC_* / SGX_MUSIC_FMT_* / 使っているポートの数（0 から） / まわった回数
+    uint32_t rate, chips;                        // 標本の速さ（VGM は 44100） / VGM のチップ（SGX_VGM_*）
+    uint32_t pos_ms, len_ms;                     // 経過・長さ（分からなければ 0。VGM は 2 回まわしの長さ）
+    uint16_t load_pct, underruns;                // 作るのにかかった時間 / 曲の時間（%）・追い越された回数
+    char     title[96], game[96], system[64], author[64];   // VGM の GD3（UTF-8）。ほかはファイルの名前を title に
+    char     error[64];
+} sgx_music_info_t;
 typedef struct { char letter; uint8_t type; bool ready; } sgx_drive_t;   // type: 1 FAT（USB ストレージ・S:）・2 FAT（フロッピー）・3 exFAT・4 NTFS・5 CD（ISO9660・音楽）・6 そのほか
 typedef struct { char vendor[9], product[17]; uint32_t mb; } sgx_storage_t;
 
@@ -240,6 +320,39 @@ typedef struct {
     uint32_t stack_size, stack_unused;    // スタックの大きさ・使っていない量
     uint32_t run_us, switches;            // 走った時間の合計（µs）・走り出した回数
 } sgx_task_info_t;
+
+// ---- GPIO と PIO2（ABI 5.0、2026-11-11）----
+// GPIO は SIO の入出力。ピンは 0〜47。空きピンは基板で違う（C ボードは GP34〜41、P ボードは GP42/43・GP46/47。
+// GP44/45 はコンソール、C の 42/43 は MIDI、46/47 は ADC）。ファームが使っているピンは触らないこと。
+enum { SGX_GPIO_IN = 0, SGX_GPIO_OUT = 1 };
+enum { SGX_GPIO_PULL_NONE = 0, SGX_GPIO_PULL_UP, SGX_GPIO_PULL_DOWN };
+// io_bank0 の機能の番号（RP2350）。SIO = 5、PIO2 = 8。SGX_GPIO_FUNC_NULL で機能を外す
+// GP42/43 の UART1 は UART_AUX（11）。GPIO_FUNC_UART（2）では繋がらない。
+enum {
+    SGX_GPIO_FUNC_HSTX = 0, SGX_GPIO_FUNC_SPI, SGX_GPIO_FUNC_UART, SGX_GPIO_FUNC_I2C,
+    SGX_GPIO_FUNC_PWM, SGX_GPIO_FUNC_SIO, SGX_GPIO_FUNC_PIO0, SGX_GPIO_FUNC_PIO1,
+    SGX_GPIO_FUNC_PIO2, SGX_GPIO_FUNC_GPCK, SGX_GPIO_FUNC_USB, SGX_GPIO_FUNC_UART_AUX,
+    SGX_GPIO_FUNC_NULL = 0x1F,
+};
+// PIO2 はユーザー用（PIO0 = 映像、PIO1 = 音源 0〜3）。1 つのプログラムが占有する。
+// GPIOBASE は 16 なので、PIO2 が使えるピンは 16〜47。命令は pioasm（RP2350、絶対ピン番号）の語をそのまま渡す。
+#define SGX_PIO2_SM_MAX   4
+#define SGX_PIO2_PIN_MIN  16
+#define SGX_PIO2_PIN_MAX  47
+enum { SGX_PIO_FIFO_JOIN_NONE = 0, SGX_PIO_FIFO_JOIN_TX = 1, SGX_PIO_FIFO_JOIN_RX = 2 };   // hardware/pio.h と同じ
+enum { SGX_PIO_SHIFT_RIGHT = 0, SGX_PIO_SHIFT_LEFT = 1 };
+
+// ---- ADC（ABI 5.1/5.2、2026-11-11）----
+// P ボード: GP40/41（ADC0/1）が L/R。C ボード: GP46/47（ADC6/7）が専用 L/R、GP40/41（A6/A7、ADC0/1）も選べる。
+// adc_start の l は低い側（偶数チャンネル）、r = l + 1。l = r = 0 は基板の既定の L/R。
+// ABI 5.2: adc_temperature_mc で RP2350 内蔵温度センサ（ADC のチャンネル 8）を読む。
+#define SGX_ADC_MAX_PINS 4
+#define SGX_ADC_CAPTURE_MAX (96000u * 10u)   // adc_capture の frames の上限（10 秒。ABI 5.2 で 16384 から広げた）
+typedef struct {
+    uint32_t frames, dropped, underruns;              // 取り込んだフレーム・捨てたフレーム・再生の途切れ
+    uint16_t peak[2], dc[2];                          // 前回の adc_stats からの振れ幅（読むと 0 に戻る）と直流分（12 ビット）
+    uint32_t fifo_over;                               // ADC FIFO があふれた回数（左右がずれるおそれ）
+} sgx_adc_stats_t;
 
 // ---- タスクとプログラム（協調）----
 typedef struct sgx_task sgx_task_t;               // プログラムの中のタスク（入口の main もその 1 つ）
@@ -573,7 +686,7 @@ struct sgx_api {
 
     // ==== ABI 4.2（2026-11-07）: voice ごとのストリーム ====
     // 既存の pcm_* は最後のポート固定・1 本だけ。こちらは任意の PT8211 ポートに
-    // 独立したリング（4KB = 44.1kHz で約23ms）を持つ。開閉はアプリ時間に片づける。
+    // 独立したリング（8KB = 44.1kHz で約46ms）を持つ。開閉はアプリ時間に片づける。
     // stream_write は「左, 右」の 16bit 符号付き。戻り値は書けたフレーム数（負 = SGX_E*）。
     // 書き込みはノンブロッキング。空きは stream_space で見る。
     int      (*stream_open)(unsigned port, unsigned rate_hz);          // 0 = 成功、負 = SGX_E*（EBUSY など）
@@ -581,7 +694,338 @@ struct sgx_api {
     unsigned (*stream_space)(unsigned port);                            // 書けるフレーム数
     void     (*stream_close)(unsigned port);
     unsigned (*stream_underruns)(unsigned port);                        // 追い越された回数
+
+    // ==== ABI 4.4（2026-11-07）: 音楽の口 ====
+    // ファイルを 1 曲、ファームの裏のタスクで鳴らす。形式は中身から見分ける: MP3 / Ogg Vorbis / WAV（ポート 0、本来の速さ）と
+    // VGM / VGZ（YM2203 x1〜2・YM2151・YM2149・AY8910・YM2612・YM2610/B・SN76489・NES APU・MSM5205・OKIM6258・SegaPCM。
+    // チップごとにポート 0 から順に、44.1kHz）。
+    // 鳴らしている間、そのポートは stream_open が EBUSY で断る。プログラムが終わると止まる
+    int      (*music_play)(const char *path, unsigned flags);          // 0 = 始めた、負 = SGX_E*（理由は music_info の error）。SGX_MUSIC_LOOP
+    void     (*music_stop)(void);
+    void     (*music_pause)(bool pause);
+    void     (*music_volume)(unsigned vol);                             // 0..254（127 = 100%・既定、254 = 200%。2026-11-14 から。前のファームは 127 で頭打ち）
+    void     (*music_info)(sgx_music_info_t *out);
+    int      (*music_seek)(uint32_t ms);                                // 頭からの位置へ飛ぶ（MP3 / OGG / WAV。VGM は SGX_ENOTSUP）
+
+    // ==== ABI 4.5（2026-11-08）: 音楽の MIX 設定 ====
+    // S:/SystemSettings/Music.cfg（ym2203_ssg=0..200・sn76489=0..200、100 = 元の大きさ）を読み直す。
+    // 鳴っている VGM にも次の塊から効く。0 = 読めた、負 = SGX_E*（読めない。今の値のまま）。
+    // ファイルが無ければ既定 76・50（見本は起動時にファイラーが書く）。
+    // 使う前に size でこの欄があるか確かめる（4.4 までのファームには無い）
+    int      (*music_settings_reload)(void);
+    unsigned (*music_ssg_pct)(void);                                    // いまの YM2203 SSG の大きさ（%）
+
+    // ==== ABI 4.6（2026-11-08）: SN76489 の MIX と、ボイスごとのチップ ====
+    // music_sn_pct: Music.cfg の sn76489=0..200（100 = 元の大きさ、既定 50）で決まる。music_settings_reload で読み直せる。
+    // music_voice_chip: port は music_info の voices の番号（0 から）。返すのはそのボイスが鳴らしているチップ（SGX_VGM_*）。
+    // 5 つ目からは 4 つ目にまとめるので、複数のビットが立つことがある。鳴っていなければ 0。
+    // 使う前に size でこの欄があるか確かめる（4.5 までのファームには無い）
+    unsigned (*music_sn_pct)(void);                                     // いまの SN76489 の大きさ（%）
+    uint32_t (*music_voice_chip)(unsigned port);                        // そのボイスのチップ（SGX_VGM_*）
+
+    // ==== ABI 4.7（2026-11-09）: VGM/VGZ を 96kHz/24bit WAV に書き出す ====
+    // in_path の VGM/VGZ を out_path（S:/A:/G: などの絶対パス）へ 96kHz/24bit ステレオ PCM の WAV で書き出す。
+    // 0 = 終わった、負 = SGX_E*。曲の長さの 1〜3 倍の時間がかかる。書き出し中は music_render_progress が 0..100。
+    // 使う前に size でこの欄があるか確かめる（4.6 までのファームには無い）
+    int      (*music_render_wav)(const char *in_path, const char *out_path);
+    unsigned (*music_render_progress)(void);
+
+    // ==== ABI 4.8（2026-11-09）: システムカーソルを動かす ====
+    // x, y は 640x480 の画面座標。ゲームが IZ などで内部カーソルを動かしたときに、
+    // ファームのシステムカーソル（矢印）も同じ位置へ動かす。0 = 動かした、負 = SGX_E*。
+    // 使う前に size でこの欄があるか確かめる（4.7 までのファームには無い）
+    int      (*mouse_warp)(int x, int y);
+
+    // ==== ABI 4.9（2026-11-10）: スペクトログラム ====
+    // music_tap: 鳴っている音の直近の PCM を out へ「左, 右」の 16bit で写す。戻り値は写したフレーム数。
+    // frames は 1〜4096。最新の frames フレームだけを返す（鳴り始めなどで足りなければ、その分だけ）。
+    // music_info の pos_ms とは違い、書き出しの環ではなく鳴らした PCM の窓なので、表示の列を作るのに使う。
+    unsigned (*music_tap)(int16_t *out, unsigned frames);
+    // bm_wrap_clear / bm_wrap_set: モード 7 のビットマップの横方向の循環（音楽 CD のスペクトログラムと同じ）。
+    // x から w 画素を off だけずらして読む（off は w で割った余り）。2 か所まで。clear で普通の行に戻る。
+    // 使う前に size でこの欄があるか確かめる（4.8 までのファームには無い）
+    void     (*bm_wrap_clear)(void);
+    void     (*bm_wrap_set)(unsigned x, unsigned w, unsigned off);
+
+    // ==== ABI 4.10（2026-11-10）: モード 7 のページ切替ダブルバッファ ====
+    // bm_page_back: 表示していない面（2 枚目）を返す。初回に 64KB を確保して表示面を写す。
+    // 取れなければ NULL（そのときは bm_vram() に直に描く）。
+    // bm_page_flip: 表裏をフレームの境目で入れ替える。戻ってきたら表示面が変わっている。
+    // 呼び手は bm_page_back() を呼び直して、新しい後ろの面へ次のフレームを描く。
+    // 使う前に size でこの欄があるか確かめる（4.9 までのファームには無い）
+    uint8_t *(*bm_page_back)(void);
+    void     (*bm_page_flip)(void);
+
+    // ==== ABI 4.11（2026-11-10）: キャッシュ付き PSRAM ビットマップの書き戻し ====
+    // SGX_MODE_BM_CACHED で開いたモード 7 のビットマップを、x,y,w,h の範囲だけ PSRAM へ書き戻す。
+    // キャッシュ付きでない面（SRAM・普通の PSRAM）では何もしない。描いたら表示の前に呼ぶ。
+    // 使う前に size でこの欄があるか確かめる（4.10 までのファームには無い）
+    void     (*bm_flush)(unsigned x, unsigned y, unsigned w, unsigned h);
+
+    // ==== ABI 4.13（2026-11-11）: MIDI ====
+    // C ボードの UART1 GP42/43（31250 8N1）と、USB MIDI ホスト。P ボードでは
+    // midi_available() = 0、読み書きは 0。route の bit0 = DIN、bit1 = USB。
+    // 使う前に size でこの欄があるか確かめる（4.12 までのファームには無い）
+    unsigned (*midi_available)(void);                    // DIN MIDI が使える（C のみ 1）
+    unsigned (*midi_read)(uint8_t *buf, unsigned max);   // 受け取ったバイトを読む
+    unsigned (*midi_write)(const uint8_t *buf, unsigned len); // 選んだ出力へ書く（選んだバイト数）
+    unsigned (*midi_available_bytes)(void);
+    unsigned (*midi_usb_available)(void);                // USB MIDI ホストが接続中
+    void     (*midi_set_route)(unsigned in_mask, unsigned out_mask);
+    unsigned (*midi_input_route)(void);
+    unsigned (*midi_output_route)(void);
+
+    // ==== ABI 5.0（2026-11-11）: GPIO と PIO2（ユーザー開放）====
+    // 使う前に size でこの欄があるか確かめる（4.13 までのファームには無い）。
+    // GPIO: 0 = 成功、負 = -SGX_E*。gpio_get はレベル（0/1）。
+    int      (*gpio_init)(unsigned pin);                         // SIO の入力、プル無し
+    int      (*gpio_set_dir)(unsigned pin, bool out);
+    int      (*gpio_set_pull)(unsigned pin, int pull);           // SGX_GPIO_PULL_*
+    int      (*gpio_set_function)(unsigned pin, unsigned func);  // SGX_GPIO_FUNC_*
+    void     (*gpio_put)(unsigned pin, bool value);
+    bool     (*gpio_get)(unsigned pin);
+
+    // PIO2: 戻り値は 0 / 1 / 位置（0〜31）か負の -SGX_E*。PIO2 は 1 つのプログラムが占有し、
+    // そのプログラムが終わるとファームが SM・命令メモリ・FIFO を片づける。
+    // pio2_available はこのプログラムが使えるか（ほかのプログラムが使っていれば 0）。
+    // pio2_load は pioasm の命令語をそのまま載せ、置いた位置を返す。配列を渡せない言語は
+    // pio2_insn で 1 語ずつ置いてから pio2_load_staged(count) を使う。
+    // pio2_sm_config は SM を初期設定する（offset から実行、分周、wrap、FIFO の結合）。
+    // pio2_sm_pins / pio2_sm_shift は後からピン割り当て・シフトを変える。
+    // pio2_sm_put / pio2_sm_get は待たない（1 = できた、0 = FIFO が一杯・空）。
+    int      (*pio2_available)(void);
+    int      (*pio2_load)(const uint16_t *insns, unsigned count);
+    int      (*pio2_insn)(unsigned index, unsigned insn);
+    int      (*pio2_load_staged)(unsigned count);
+    int      (*pio2_gpio_init)(unsigned pin);
+    int      (*pio2_sm_claim)(unsigned sm);
+    int      (*pio2_sm_unclaim)(unsigned sm);
+    int      (*pio2_sm_config)(unsigned sm, unsigned offset, unsigned clkdiv_int, unsigned clkdiv_frac8,
+                               unsigned wrap_top, unsigned wrap_bottom, unsigned fifo_join);
+    int      (*pio2_sm_pins)(unsigned sm, unsigned out_base, unsigned out_count, unsigned set_base, unsigned set_count,
+                             unsigned in_base, unsigned sideset_base, unsigned sideset_count,
+                             unsigned sideset_opt, unsigned sideset_pindirs, unsigned jmp_pin);
+    int      (*pio2_sm_shift)(unsigned sm, unsigned out_dir, unsigned out_auto, unsigned out_thresh,
+                              unsigned in_dir, unsigned in_auto, unsigned in_thresh);
+    int      (*pio2_sm_clkdiv)(unsigned sm, unsigned div_int, unsigned frac8);
+    int      (*pio2_sm_enable)(unsigned sm, bool on);
+    void     (*pio2_sm_restart)(unsigned sm);
+    void     (*pio2_sm_clear_fifos)(unsigned sm);
+    void     (*pio2_sm_exec)(unsigned sm, unsigned insn);
+    int      (*pio2_sm_put)(unsigned sm, uint32_t value);
+    int      (*pio2_sm_get)(unsigned sm, uint32_t *value);
+    unsigned (*pio2_sm_tx_level)(unsigned sm);
+    unsigned (*pio2_sm_rx_level)(unsigned sm);
+    bool     (*pio2_sm_tx_full)(unsigned sm);
+    bool     (*pio2_sm_rx_empty)(unsigned sm);
+    int      (*pio2_sm_set_pins)(unsigned sm, unsigned base, uint32_t values, unsigned count);
+    int      (*pio2_sm_set_pindirs)(unsigned sm, unsigned base, uint32_t dirs, unsigned count);
+    void     (*pio2_sm_drain_tx)(unsigned sm);
+    uint32_t (*pio2_irq_flags)(void);
+    void     (*pio2_irq_clear)(uint32_t mask);
+
+    // ==== ABI 5.1（2026-11-11）: ADC ====
+    // 単発読み取り: adc_read(pin) は 0〜4095、負 = -SGX_E*（-EINVAL = そのピンは ADC に使えない、
+    // -EBUSY = adc_start が ADC を使っている）。adc_can_read で先に確かめられる。
+    // 連続取り込み: adc_start(pin_l, pin_r) は 96kHz のステレオをボイス 0 で鳴らす。
+    // pin_l は低い側（偶数チャンネル）、pin_r = pin_l + 1。0,0 は基板の既定の L/R
+    // （P: 40/41、C: 46/47）。C は 40/41（A6/A7）も選べる。0 = 始めた、負 = -SGX_E*。
+    // adc_stats は sgx_adc_stats_t を書く（peak は読むと 0 に戻る）。adc_pins は使えるピンを
+    // out に max 件まで書き、総数を返す（C: 40,41,46,47 / P: 40,41）。
+    // 使う前に size でこの欄があるか確かめる（5.0 までのファームには無い）。
+    int      (*adc_read)(unsigned pin);
+    int      (*adc_start)(unsigned pin_l, unsigned pin_r);
+    void     (*adc_stop)(void);
+    bool     (*adc_active)(void);
+    void     (*adc_stats)(sgx_adc_stats_t *out);
+    unsigned (*adc_pins)(uint8_t *out, unsigned max);
+    bool     (*adc_can_read)(unsigned pin);
+    // 生の 1 ブロック取り込み（96kHz、L,R 交互、12 ビット）。out は frames x 2 個の uint16_t。
+    // 音源には触らない（音質の測定用）。0 = できた、負 = -SGX_E*。frames は 1〜SGX_ADC_CAPTURE_MAX（10 秒）。
+    int      (*adc_capture)(unsigned pin_l, unsigned pin_r, uint16_t *out, unsigned frames);
+    // RP2350 内蔵温度センサ。摂氏の 1/1000 を out に書く。0 = 読めた、-SGX_EBUSY = 連続取り込み中。
+    int      (*adc_temperature_mc)(int32_t *out);
+    // ---- ABI 5.3: FB のプリミティブ描画（SPEC_gfx.md）----
+    // t は描く先（SGX_GFX_FB・SGX_GFX_BITMAP・SGX_GFX_BITMAP_BACK・画像の番号）。状態（ペン・ブラシ・…）は描く先ごとに持つ。
+    // 色はその面の値（RGB555 は rgb() の値、CLUT は色の番号。gfx_rgb で面に合わせて作れる）。
+    // 点の並び xy は (x, y) の対が n 個。図形の座標は画素の番号（線は画素の中心を通る。長方形などは右と下を含まない）。
+    // パス（gfx_path_*）の座標は 24.8 の固定小数点で、変換行列を通る。行列の a〜d は 16.16、e f は 24.8。角度は 1/16 度。
+    // 戻り値の無い関数は、描く先が使えなければ何もしない（モード 7 を開いていないビットマップなど）。
+    void     (*gfx_reset)(int t);                                         // 状態を既定へ
+    uint32_t (*gfx_rgb)(int t, unsigned r, unsigned g, unsigned b);       // 0..31 の色を面の値へ（CLUT は近い色の番号）
+    void     (*gfx_pen)(int t, uint32_t color, unsigned width, unsigned style);
+    void     (*gfx_pen_ext)(int t, unsigned cap, unsigned join);
+    void     (*gfx_brush)(int t, uint32_t color, unsigned style);
+    void     (*gfx_bk)(int t, unsigned mode, uint32_t color);
+    void     (*gfx_rop2)(int t, unsigned rop2);
+    void     (*gfx_fill_rule)(int t, unsigned rule);
+    void     (*gfx_aa)(int t, bool on);
+    void     (*gfx_clip)(int t, int32_t l, int32_t tp, int32_t r, int32_t b);   // r <= l で全体
+    void     (*gfx_matrix)(int t, const int32_t m[6]);
+    void     (*gfx_concat)(int t, const int32_t m[6]);
+    void     (*gfx_get_matrix)(int t, int32_t m[6]);
+    void     (*gfx_pset)(int t, int32_t x, int32_t y, uint32_t c);
+    int32_t  (*gfx_pget)(int t, int32_t x, int32_t y);                    // 外・使えない描く先は -1
+    void     (*gfx_move_to)(int t, int32_t x, int32_t y);
+    void     (*gfx_line_to)(int t, int32_t x, int32_t y);
+    void     (*gfx_line)(int t, int32_t x0, int32_t y0, int32_t x1, int32_t y1);
+    void     (*gfx_polyline)(int t, const int32_t *xy, unsigned n);
+    void     (*gfx_polyline_to)(int t, const int32_t *xy, unsigned n);
+    void     (*gfx_poly_bezier)(int t, const int32_t *xy, unsigned n);    // n = 1 + 3k
+    void     (*gfx_poly_bezier_to)(int t, const int32_t *xy, unsigned n); // n = 3k
+    void     (*gfx_arc)(int t, int32_t l, int32_t tp, int32_t r, int32_t b, int32_t xs, int32_t ys, int32_t xe, int32_t ye);
+    void     (*gfx_arc_to)(int t, int32_t l, int32_t tp, int32_t r, int32_t b, int32_t xs, int32_t ys, int32_t xe, int32_t ye);
+    void     (*gfx_angle_arc)(int t, int32_t x, int32_t y, uint32_t r, int32_t start16, int32_t sweep16);
+    void     (*gfx_rectangle)(int t, int32_t l, int32_t tp, int32_t r, int32_t b);
+    void     (*gfx_round_rect)(int t, int32_t l, int32_t tp, int32_t r, int32_t b, int32_t ew, int32_t eh);
+    void     (*gfx_ellipse)(int t, int32_t l, int32_t tp, int32_t r, int32_t b);
+    void     (*gfx_polygon)(int t, const int32_t *xy, unsigned n);
+    void     (*gfx_poly_polygon)(int t, const int32_t *xy, const uint32_t *counts, unsigned ncontours);
+    void     (*gfx_pie)(int t, int32_t l, int32_t tp, int32_t r, int32_t b, int32_t xs, int32_t ys, int32_t xe, int32_t ye);
+    void     (*gfx_chord)(int t, int32_t l, int32_t tp, int32_t r, int32_t b, int32_t xs, int32_t ys, int32_t xe, int32_t ye);
+    void     (*gfx_fill_rect)(int t, int32_t l, int32_t tp, int32_t r, int32_t b, uint32_t color);
+    void     (*gfx_path_begin)(int t);
+    void     (*gfx_path_end)(int t);
+    void     (*gfx_path_move_to)(int t, int32_t x, int32_t y);
+    void     (*gfx_path_line_to)(int t, int32_t x, int32_t y);
+    void     (*gfx_path_quad_to)(int t, int32_t cx, int32_t cy, int32_t x, int32_t y);
+    void     (*gfx_path_cubic_to)(int t, int32_t c1x, int32_t c1y, int32_t c2x, int32_t c2y, int32_t x, int32_t y);
+    void     (*gfx_path_arc)(int t, int32_t cx, int32_t cy, int32_t r, int32_t a0_16, int32_t a1_16);
+    void     (*gfx_path_close)(int t);
+    void     (*gfx_path_fill)(int t);
+    void     (*gfx_path_stroke)(int t);
+    void     (*gfx_path_fill_stroke)(int t);
+    // ビットマップ: 元 s も描く先の番号。key < 0 なら透明色なし（元の値と同じ画素を飛ばす）
+    void     (*gfx_bitblt)(int t, int32_t dx, int32_t dy, int32_t w, int32_t h, int s, int32_t sx, int32_t sy, unsigned rop, int32_t key);
+    void     (*gfx_stretch_blt)(int t, int32_t dx, int32_t dy, int32_t dw, int32_t dh, int s, int32_t sx, int32_t sy, int32_t sw, int32_t sh,
+                                unsigned rop, int32_t key);
+    // DIB: bits は fmt（SGX_DIB_*）の w x h（1 行 stride バイト）。palette は INDEX 形式の 0x00RRGGBB（NULL なら番号のまま）
+    void     (*gfx_draw_dib)(int t, int32_t dx, int32_t dy, int32_t dw, int32_t dh, const void *bits, unsigned fmt, int32_t w, int32_t h,
+                             int32_t stride, const uint32_t *palette, unsigned npal, int32_t sx, int32_t sy, int32_t sw, int32_t sh, unsigned rop);
+    // 画像: 番号（16 から）か負（-SGX_ENOMEM・-SGX_EINVAL・-SGX_EIO）。fmt は SGX_GFX_FMT_*。load は PNG / JPEG / GIF / TIFF
+    //（fmt は RGB555 か CLUT8。CLUT8 は FB のパレットの近い色）。why が NULL でなければ失敗の理由を指す。プログラムが終わると返す
+    int      (*gfx_image_new)(int32_t w, int32_t h, unsigned fmt);
+    int      (*gfx_image_load)(const char *path, unsigned fmt, const char **why);
+    void     (*gfx_image_free)(int t);
+    int      (*gfx_image_info)(int t, int32_t *w, int32_t *h, unsigned *fmt);   // 0 = ある
+    void    *(*gfx_image_pixels)(int t, int32_t *stride);                        // 画素の先頭（直に読み書きしてよい）
+    // 文字: face は SGX_FONT_*。height は画素。weight は SGX_FW_*。flags は SGX_FF_*。escapement は 0 / 900 / 1800 / 2700
+    void     (*gfx_font)(int t, unsigned face, int32_t height, unsigned weight, unsigned flags, unsigned escapement);
+    void     (*gfx_text_color)(int t, uint32_t color, unsigned align, int32_t char_extra);   // 色・揃え（SGX_TA_*）・文字間
+    void     (*gfx_text_out)(int t, int32_t x, int32_t y, const char *utf8, uint32_t len);
+    void     (*gfx_ext_text_out)(int t, int32_t x, int32_t y, unsigned opt, const int32_t *rect, const char *utf8, uint32_t len, const int32_t *dx);
+    int32_t  (*gfx_draw_text)(int t, const char *utf8, uint32_t len, int32_t rect[4], unsigned flags);   // 書いた高さ（CALCRECT は rect を直す）
+    void     (*gfx_text_extent)(int t, const char *utf8, uint32_t len, int32_t *w, int32_t *h);
+    // ---- 5.5（2026-11-13）: メモリの VGM / VGZ を鳴らす（music_play のファイルの代わり。中身はファームが写すので、返ったあと data を返してよい。
+    // 止める・一時停止・音量・様子は music_* のまま）。Doom の OPL2 の BGM（MIDI を GENMIDI で YM3812 の VGM に直して渡す）
+    int      (*music_play_mem)(const void *data, uint32_t len, unsigned flags);   // 0 = 始めた、負 = SGX_E*。SGX_MUSIC_LOOP
+    // ---- 5.6（2026-11-14）: 大きさの決まったファイルを作り、好きな位置へ書く（smf2vgm の出力。gzip の大きさを先に数えてから作る）----
+    // create_file は size バイトの 0 のファイルを作る（あれば置き換える）。ra_open で開き、ra_write でその場へ書く。
+    // ra_write の offset は 512 の倍数、len も 512 の倍数（ただしファイルの終わりに届く最後の 1 回は端数でよい）。ファイルの大きさは変えない。
+    // 流し書きと違って下回りを持ち続けないので、書いている間もほかのファイルを ra_read で読める。S: には書けない（SGX_EROFS）
+    int      (*create_file)(const char *path, uint32_t size);                     // 0 = 作った、ほかは SGX_E*
+    int      (*ra_write)(sgx_file_t *f, uint32_t offset, const void *src, uint32_t len);   // 0 = 書いた、ほかは SGX_E*
+    // ---- 5.7（2026-11-15）: VGM / VGZ を PCM として受け取る（wav2mp3.sgx が MP3 にする。ファームの合成は WAV の書き出しと同じ）----
+    // open は 44.1kHz・16 ビット・ステレオの長さ（フレーム）と速さを返す（ファイルを 1 回とおす。ループの所も 1 回）。read は左右に並べた標本で、
+    // 作った数（0 = 終わり）。開いている間は music_play などが断られる。close を忘れてもプログラムの終わりに閉じる。失敗の理由は music_info の error
+    int      (*music_pcm_open)(const char *path, uint32_t *frames, uint32_t *rate);   // 0 = 開いた、負 = SGX_E*
+    int      (*music_pcm_read)(int16_t *stereo, unsigned frames);
+    void     (*music_pcm_close)(void);
+    // ---- 5.9（2026-11-15）: IME（ファイラーと同じ日本語・English・한국어、辞書・学習も同じ。SGCALC のセルの編集）----
+    // ime_key: 打ったキーを先に渡す。1 = IME が使った（commit に確定した UTF-8 が入ることがある）、0 = 使わなかった（プログラムが扱う）。
+    // SGX_KEY_IME（Ctrl+Space）でオン・オフ（オフにするとき未確定の字を commit に出す）。ime_draw は画面を描いたあとに呼び、
+    // 未確定の字（文節ごと）を col,row から max 桁まで置いて候補の窓を重ねる。使った桁を返す（窓は端末の写しに直接書くので、
+    // 呼び手の画面の写しは次に描くとき全部を送り直すこと）。ime_state は状態の短い名前（A / あ / カ / 英 / 한 / 漢 など）
+    int      (*ime_key)(int key, char *commit, unsigned n);
+    bool     (*ime_on)(void);
+    bool     (*ime_composing)(void);
+    unsigned (*ime_draw)(unsigned col, unsigned row, unsigned max, uint32_t attr);
+    const char *(*ime_state)(void);
+    void     (*ime_cancel)(void);
+    // ---- 5.10（2026-11-15）: 表計算のマクロ（SGCALC。どのプログラムからも呼べる）----
+    // lang（SGX_MACRO_*）のプログラム code を走らせ、終わるまで戻らない。プログラムの Sheet は sheet のコールバックでセルを読み書きする
+    // （コールバックは言語のタスクから呼ばれる。そのあいだ呼び手のタスクは macro_run の中で待っている）。print などの出力は捨てる。
+    // 0 = 成功、-SGX_EMACRO = 構文・実行の誤り（err に文）、-SGX_EBUSY = 走らせている、-SGX_ENOTSUP = その言語が無い。
+    // コールバックの中では画面・キー・ファイルの口を呼ばない
+    int      (*macro_run)(unsigned lang, const char *code, uint32_t len, const struct sgx_macro_sheet *sheet, char *err, uint32_t errn);
+    // ---- 5.11（2026-11-16）: どこから走ったか・進み具合の窓 ----
+    // SGX_RUN_*。POPUP はファイラーのコンテキストメニューの ! で、ファイラーの画面の上の窓で走っている（term_write は画面に出さない
+    // ほうがよい。進み具合は progress_box で）。FILER はファイラーから端末の画面で、SHELL はシェルの前景、PIPE は背景・パイプの段
+    unsigned (*run_context)(void);
+    // 進み具合の窓をテキスト面の真ん中に描く（ファイラーの WAV 書き出しと同じ形・表示の言語）。NULL なら窓の所を空白にする。
+    // POPUP のとき以外でも描ける（端末の写しの上に描く）。毎回全体を描くので、0.2〜1 秒に 1 度でよい
+    void     (*progress_box)(const struct sgx_progress *p);
 };
+
+// ---- run_context（5.11）の値 ----
+enum { SGX_RUN_FILER = 0, SGX_RUN_SHELL = 1, SGX_RUN_PIPE = 2, SGX_RUN_CHILD = 3, SGX_RUN_POPUP = 4 };
+// ---- progress_box（5.11）----
+#define SGX_PB_DONE     0x01u                    // 終わった（「終了しました」と合計の時間。「何かキーを押すと閉じます」）
+#define SGX_PB_FAILED   0x02u                    // 誤りで終わった（error に理由）
+#define SGX_PB_CANCELED 0x04u                    // 止めた
+#define SGX_PB_STOPPING 0x08u                    // 止めている途中
+typedef struct sgx_progress {
+    const char *title;                            // 1 行目（プログラムの名前と何をしているか。例 "wav2mp3: SC0111.vgz"）
+    const char *file;                             // 2 行目（出力のファイル。NULL 可）
+    const char *stage;                            // 段（例 "pass 1 of 2"。NULL 可）
+    int32_t  pct;                                 // 全体の 0〜100（-1 = 分からない）
+    uint32_t elapsed_s;                           // 経過（秒）
+    int32_t  left_s;                              // 残りの見込み（秒、-1 = 分からない）
+    uint64_t out_bytes;                           // いままでに書いた出力（バイト、0 なら出さない）
+    uint64_t out_total;                           // 出力の大きさの見込み（0 = 分からない）
+    uint32_t flags;                               // SGX_PB_*
+    const char *error;                            // SGX_PB_FAILED の理由
+} sgx_progress_t;
+
+// ---- 表計算のマクロ（5.10）の値 ----
+enum { SGX_MACRO_RUBY = 1, SGX_MACRO_PYTHON = 2, SGX_MACRO_BASIC = 3 };
+enum { SGX_MCELL_EMPTY = 0, SGX_MCELL_NUMBER, SGX_MCELL_TEXT, SGX_MCELL_ERROR };   // ERROR は text に "#DIV/0!" など
+typedef struct {
+    uint8_t  kind;                                // SGX_MCELL_*
+    uint8_t  reserved[7];
+    double   num;                                 // kind == NUMBER
+    char     text[256];                           // UTF-8、0 終端
+} sgx_macro_value_t;
+typedef struct sgx_macro_sheet {
+    uint32_t size;                                // sizeof(sgx_macro_sheet_t)
+    void    *user;
+    // 行・列は 0 始まり。0 = 成功、負 = -SGX_E*（範囲外は -SGX_EINVAL）
+    int  (*get_cell)(void *user, int row, int col, sgx_macro_value_t *out);
+    int  (*set_number)(void *user, int row, int col, double v);
+    int  (*set_text)(void *user, int row, int col, const char *text);          // 空の文字列は消す
+    int  (*set_formula)(void *user, int row, int col, const char *formula);    // '=' は付けても付けなくてもよい。空は消す
+    int  (*clear_cell)(void *user, int row, int col);
+    int  (*get_formula)(void *user, int row, int col, char *out, uint32_t n); // セルの生の入力（数式は先頭 '=' 付き）
+    int  (*bounds)(void *user, int *r0, int *c0, int *r1, int *c1);           // 1 = 使っている範囲、0 = 空
+    void (*recalc)(void *user);
+    const char *(*name)(void *user);                                          // シートの名前（NULL 可）
+    int  max_rows, max_cols;                                                  // 行・列の数（範囲の確かめ）
+} sgx_macro_sheet_t;
+
+// ---- FB のプリミティブ描画（ABI 5.3、SPEC_gfx.md）の値 ----
+// 描く先: FB（いまの書き込みページ）・モード 7 のビットマップ・その後ろのページ・gfx_image_new / gfx_image_load の番号（16 から）
+#define SGX_GFX_FB        0
+#define SGX_GFX_BITMAP    1
+#define SGX_GFX_BITMAP_BACK 2
+enum { SGX_GFX_FMT_RGB555 = 0, SGX_GFX_FMT_CLUT8 = 1, SGX_GFX_FMT_CLUT4 = 2 };
+enum { SGX_PS_SOLID = 0, SGX_PS_DASH, SGX_PS_DOT, SGX_PS_DASHDOT, SGX_PS_DASHDOTDOT, SGX_PS_NULL };   // ペンの線の種類
+enum { SGX_CAP_ROUND = 0, SGX_CAP_SQUARE, SGX_CAP_FLAT };
+enum { SGX_JOIN_ROUND = 0, SGX_JOIN_BEVEL, SGX_JOIN_MITER };
+enum { SGX_BS_SOLID = 0, SGX_BS_NULL, SGX_BS_HORIZONTAL, SGX_BS_VERTICAL, SGX_BS_FDIAGONAL, SGX_BS_BDIAGONAL,
+       SGX_BS_CROSS, SGX_BS_DIAGCROSS };                       // ブラシ
+enum { SGX_BK_TRANSPARENT = 0, SGX_BK_OPAQUE = 1 };
+enum { SGX_R2_COPYPEN = 0, SGX_R2_XORPEN, SGX_R2_MERGEPEN, SGX_R2_MASKPEN, SGX_R2_NOT, SGX_R2_NOTCOPYPEN };   // OR = MERGE、AND = MASK
+enum { SGX_FILL_NONZERO = 0, SGX_FILL_EVENODD = 1 };
+enum { SGX_SRCCOPY = 0, SGX_SRCPAINT, SGX_SRCAND, SGX_SRCINVERT, SGX_NOTSRCCOPY, SGX_DSTINVERT, SGX_BLACKNESS, SGX_WHITENESS };
+enum { SGX_DIB_RGB888 = 0, SGX_DIB_RGBA8888, SGX_DIB_RGB565, SGX_DIB_RGB555, SGX_DIB_GRAY8, SGX_DIB_INDEX8, SGX_DIB_INDEX4,
+       SGX_DIB_INDEX1, SGX_DIB_NATIVE };
+enum { SGX_FONT_ROM = 0, SGX_FONT_8X8 = 1 };
+enum { SGX_FW_NORMAL = 400, SGX_FW_BOLD = 700 };
+enum { SGX_FF_ITALIC = 1, SGX_FF_UNDERLINE = 2, SGX_FF_STRIKEOUT = 4 };
+enum { SGX_TA_LEFT = 0, SGX_TA_CENTER = 1, SGX_TA_RIGHT = 2, SGX_TA_TOP = 0, SGX_TA_BASELINE = 4, SGX_TA_BOTTOM = 8 };
+enum { SGX_ETO_OPAQUE = 2, SGX_ETO_CLIPPED = 4 };
+enum { SGX_DT_LEFT = 0, SGX_DT_CENTER = 1, SGX_DT_RIGHT = 2, SGX_DT_TOP = 0, SGX_DT_VCENTER = 4, SGX_DT_BOTTOM = 8,
+       SGX_DT_WORDBREAK = 0x10, SGX_DT_SINGLELINE = 0x20, SGX_DT_NOCLIP = 0x100, SGX_DT_CALCRECT = 0x400 };
 
 // ---- SDK のヒープ（2026-11-03）----
 // malloc/free は 64KB から始まり、空きが 32KB を切ると 64KB 増える。空きが 128KB になると
